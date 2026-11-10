@@ -1,0 +1,1 @@
+{% extends 'base.html' %}{% block content %}<section class="card form-card"><h2>請交付登入資訊給本人</h2><p>登入帳號：<strong>{{ account.username }}</strong></p><p>臨時密碼：<code id="temporary">{{ temporary }}</code></p><p class="notice">臨時密碼僅在本頁顯示，24 小時內有效。使用者登入後必須更換；請勿在公共場所分享。</p><a class="button" href="{% url 'users' %}">完成</a></section>{% endblock %}

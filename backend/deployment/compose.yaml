@@ -1,0 +1,66 @@
+services:
+  db:
+    restart: unless-stopped
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: zy_web
+      MYSQL_USER: zy_web
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?required}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?required}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost --silent"]
+      interval: 5s
+      retries: 30
+  web:
+    restart: unless-stopped
+    build:
+      context: ../..
+      dockerfile: backend/deployment/Dockerfile
+      target: web
+    env_file: ../../.env
+    environment:
+      ZY_DEBUG: '0'
+      MYSQL_HOST: db
+      MYSQL_PORT: '3306'
+      MYSQL_USER: zy_web
+    volumes:
+      - attachments:/app/private_media
+      - static_files:/app/staticfiles
+    expose: ['8000']
+    depends_on:
+      db:
+        condition: service_healthy
+  worker:
+    restart: unless-stopped
+    build:
+      context: ../..
+      dockerfile: backend/deployment/Dockerfile
+      target: web
+    env_file: ../../.env
+    environment:
+      ZY_DEBUG: '0'
+      MYSQL_HOST: db
+      MYSQL_PORT: '3306'
+      MYSQL_USER: zy_web
+    command: ["python", "manage.py", "process_notifications", "--loop"]
+    depends_on:
+      db:
+        condition: service_healthy
+  proxy:
+    restart: unless-stopped
+    build:
+      context: ../..
+      dockerfile: backend/deployment/Dockerfile
+      target: proxy
+    ports: ['443:443']
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+      - static_files:/srv/static:ro
+    depends_on: [web]
+volumes:
+  mysql_data:
+  attachments:
+  static_files:

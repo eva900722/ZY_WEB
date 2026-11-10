@@ -1,0 +1,1 @@
+{% extends 'base.html' %}{% block content %}<section class="card form-card">{% if subtitle %}<p class="muted">{{ subtitle }}</p>{% endif %}<form method="post" enctype="multipart/form-data">{% csrf_token %}{{ form.as_p }}<div class="actions"><button type="submit">確認儲存</button><a class="button secondary" href="{% url 'dashboard' %}">返回</a></div></form></section>{% endblock %}

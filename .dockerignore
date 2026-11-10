@@ -1,0 +1,17 @@
+.venv
+.tools
+mysql_data
+private_media
+staticfiles
+backups
+.env
+.env.*
+.mysql*
+*.pid
+**/__pycache__
+.ruff_cache
+.git
+backend/deployment/certs
+
+frontend/node_modules
+frontend/dist

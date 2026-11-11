@@ -12,7 +12,7 @@ from apps.forms.services import latest, accepted, dynamic_form
 from apps.tickets.models import Ticket
 from apps.tickets.forms import TicketForm, EntryForm, AssignmentForm
 from apps.tickets.views import filtered
-from apps.tickets.services import create_ticket, assign, update_status, add_entry
+from apps.tickets.services import create_ticket, assign, claim, update_status, add_entry
 from apps.attachments.services import validate_uploads, store
 from apps.audit.services import log
 from common.permissions import (
@@ -33,7 +33,7 @@ def summary(t):
         "company_name": t.company.name,
         "status": t.status,
         "status_label": t.get_status_display(),
-        "engineer_name": str(t.engineer) if t.engineer_id else "尚未指派",
+        "engineer_name": str(t.engineer) if t.engineer_id else "尚未接手",
         "reporter_name": t.snapshot.get("display_name", ""),
         "created_at": t.created_at,
         "updated_at": t.updated_at,
@@ -53,12 +53,6 @@ def transitions(user, t):
     }.get(t.status, [])
     if user.role in ["reporter", "company_admin"]:
         options = ["closed"] if t.status == "completed" else []
-    elif user.role == "engineer":
-        options = (
-            []
-            if t.status in ["closed", "cancelled"]
-            else [s for s in options if s not in ["closed", "cancelled"]]
-        )
     return [{"value": s, "label": Ticket.Status(s).label} for s in options]
 
 
@@ -217,6 +211,12 @@ def detail(request, pk):
                 require(request.user, "it_admin")
                 d = valid(AssignmentForm(request.data))
                 assign(request.user, pk, d["revision"], d["engineer"], d["reason"])
+            elif action == "claim":
+                require(request.user, "it_admin")
+                from django import forms
+
+                revision = forms.IntegerField(min_value=1).clean(request.data.get("revision"))
+                claim(request.user, pk, revision)
             elif action == "status":
                 from django import forms
 
@@ -292,12 +292,14 @@ def detail(request, pk):
         "transitions": transitions(request.user, t),
         "can_internal": internal_allowed(request.user),
         "can_comment": t.status not in ["closed", "cancelled"],
+        "can_claim": request.user.role == "it_admin"
+        and t.status == "unassigned" and t.engineer_id is None,
     }
     result["engineers"] = (
         [
             {"id": u.pk, "name": str(u)}
             for u in User.objects.filter(
-                role="engineer", is_active=True, deleted_at__isnull=True
+                role="it_admin", is_active=True, deleted_at__isnull=True
             )
         ]
         if request.user.role == "it_admin"

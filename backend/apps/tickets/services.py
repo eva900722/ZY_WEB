@@ -1,4 +1,3 @@
-import uuid
 from django.core.exceptions import ValidationError, PermissionDenied
 from django.db import transaction
 from django.utils import timezone
@@ -9,7 +8,7 @@ from apps.forms.services import accepted
 from apps.audit.services import log
 from apps.notifications.services import event
 from common.permissions import tickets_for, require
-from .models import Ticket, Entry, StatusHistory, AssignmentHistory
+from .models import Ticket, Entry, StatusHistory, AssignmentHistory, DailyTicketCounter
 
 
 def locked_ticket(user, pk, revision):
@@ -28,8 +27,6 @@ def create_ticket(user, company, reporter, version, cleaned, answers):
     company = Company.objects.select_for_update().get(pk=company.pk)
     if not company.is_active:
         raise ValidationError("公司已停用")
-    if user.role == "engineer":
-        raise PermissionDenied
     if user.role != "it_admin" and company.pk != user.company_id:
         raise PermissionDenied
     if (
@@ -44,7 +41,18 @@ def create_ticket(user, company, reporter, version, cleaned, answers):
     version = FormVersion.objects.get(pk=version.pk, company=company)
     if not accepted(version):
         raise ValidationError("表單版本已停止接受，請保留內容並切換新版")
-    number = f"{company.code.upper()}{timezone.localdate():%Y%m%d}-{uuid.uuid4().hex[:16].upper()}"
+    # The company row is already locked, including the first counter of each day.
+    day = timezone.localdate()
+    counter, _ = DailyTicketCounter.objects.select_for_update().get_or_create(
+        company=company, date=day
+    )
+    while True:
+        counter.last_number += 1
+        number = f"{company.code.upper()}{day:%Y%m%d}-{counter.last_number:03d}"
+        # Also avoid existing numbers if a company code was reused after a rename.
+        if not Ticket.objects.filter(number=number).exists():
+            break
+    counter.save(update_fields=["last_number"])
     snapshot = {
         k: getattr(reporter, k)
         for k in [
@@ -72,7 +80,7 @@ def create_ticket(user, company, reporter, version, cleaned, answers):
     )
     StatusHistory.objects.create(ticket=t, actor=user, previous="", current=t.status)
     log(user, "ticket.created", t.number, company=company)
-    event(t, "created", f"案件 {t.number} 已受理，等待派工。")
+    event(t, "created", f"案件 {t.number} 已受理，等待接手。")
     return t
 
 
@@ -80,9 +88,31 @@ def create_ticket(user, company, reporter, version, cleaned, answers):
 def assign(user, pk, revision, engineer, reason):
     require(user, "it_admin")
     t = locked_ticket(user, pk, revision)
+    if not t.engineer_id:
+        raise ValidationError("請先接手案件，再交接給其他負責人")
+    return _assign_ticket(user, t, engineer, reason)
+
+
+@transaction.atomic
+def claim(user, pk, revision):
+    require(user, "it_admin")
+    if not user.is_active or user.deleted_at:
+        raise PermissionDenied
+    # Lock by ID so simultaneous claimers see the committed winner, not a stale scope.
+    t = Ticket.objects.select_for_update().filter(pk=pk).first()
+    if not t:
+        raise PermissionDenied
+    if t.engineer_id is not None or t.status != "unassigned":
+        raise ValidationError("此案件已有人負責或不再待接手，請重新載入。")
+    if t.revision != revision:
+        raise ValidationError("案件已更新，請重新載入後再領單。")
+    return _assign_ticket(user, t, user, "接手處理", start_processing=True)
+
+
+def _assign_ticket(user, t, engineer, reason, start_processing=False):
     engineer = User.objects.select_for_update().get(pk=engineer.pk)
-    if engineer.role != "engineer" or not engineer.is_active or engineer.deleted_at:
-        raise ValidationError("工程師不可用")
+    if engineer.role != "it_admin" or not engineer.is_active or engineer.deleted_at:
+        raise ValidationError("負責人不可用")
     if t.status in ["closed", "cancelled"]:
         raise ValidationError("已結案或取消案件需先重新開啟")
     AssignmentHistory.objects.create(
@@ -91,9 +121,9 @@ def assign(user, pk, revision, engineer, reason):
     t.engineer = engineer
     if t.status == "unassigned":
         StatusHistory.objects.create(
-            ticket=t, actor=user, previous=t.status, current="assigned", reason=reason
+            ticket=t, actor=user, previous=t.status, current="processing" if start_processing else "assigned", reason=reason
         )
-        t.status = "assigned"
+        t.status = "processing" if start_processing else "assigned"
     t.revision += 1
     t.save()
     log(
@@ -103,7 +133,7 @@ def assign(user, pk, revision, engineer, reason):
         company=t.company,
         details={"engineer_id": engineer.pk, "reason": reason},
     )
-    event(t, "assigned", f"案件 {t.number} 已更新負責工程師。")
+    event(t, "assigned", f"案件 {t.number} 已更新負責人。", send_email=start_processing)
     return t
 
 
@@ -124,12 +154,10 @@ def update_status(user, pk, revision, status, reason):
     if user.role in ["reporter", "company_admin"]:
         if not (t.status == "completed" and status == "closed"):
             raise PermissionDenied
-    elif user.role == "engineer" and status in ["cancelled", "closed"]:
-        raise PermissionDenied
     if t.status in ["closed", "cancelled"] and user.role != "it_admin":
         raise PermissionDenied
     if status in ["processing", "waiting", "completed"] and not t.engineer_id:
-        raise ValidationError("請先指派工程師")
+        raise ValidationError("請先接手案件")
     if not reason.strip():
         raise ValidationError("請填寫處理說明")
     old = t.status
@@ -151,6 +179,7 @@ def update_status(user, pk, revision, status, reason):
         t,
         "completed" if status == "completed" else "updated",
         f"案件 {t.number} 狀態：{t.get_status_display()}。",
+        send_email=status == "completed",
     )
     return t
 
@@ -158,7 +187,7 @@ def update_status(user, pk, revision, status, reason):
 @transaction.atomic
 def add_entry(user, pk, revision, body, internal):
     t = locked_ticket(user, pk, revision)
-    if internal and user.role not in ["engineer", "it_admin"]:
+    if internal and user.role != "it_admin":
         raise PermissionDenied
     if t.status in ["closed", "cancelled"]:
         raise ValidationError("已結案或取消，請先由管理者重開")

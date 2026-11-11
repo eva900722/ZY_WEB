@@ -8,9 +8,10 @@ import FieldErrors from "../components/FieldErrors.vue";
 import Pagination from "../components/Pagination.vue";
 const route = useRoute(),
   isAudit = computed(() => route.path.startsWith("/audit")),
-  data = ref<any>({ items: [], page: 1, pages: 1, total: 0 }),
+  data = ref<any>({ items: [], page: 1, pages: 1, total: 0, unread: 0 }),
   error = ref(""),
   busy = ref(false),
+  markingAll = ref(false),
   filters = reactive({
     actor: "",
     company: "",
@@ -37,9 +38,23 @@ async function load(page = 1) {
 async function read(n: any) {
   try {
     await post("notifications/" + n.id + "/read/", {});
+    window.dispatchEvent(new Event("notifications-updated"));
     await load(data.value.page);
   } catch (e) {
     error.value = errorText(e);
+  }
+}
+async function readAll() {
+  markingAll.value = true;
+  error.value = "";
+  try {
+    await post("notifications/read-all/", {});
+    window.dispatchEvent(new Event("notifications-updated"));
+    await load(data.value.page);
+  } catch (e) {
+    error.value = errorText(e);
+  } finally {
+    markingAll.value = false;
   }
 }
 onMounted(() => load());
@@ -66,7 +81,16 @@ watch(
         ? '追蹤系統重要操作與資料異動。'
         : '查看案件更新與需要您回覆的事項。'
     "
-  /><FieldErrors :message="error" />
+  >
+    <button
+      v-if="!isAudit"
+      class="btn secondary"
+      :disabled="busy || markingAll || !data.unread"
+      @click="readAll"
+    >
+      <Check :size="16" />{{ markingAll ? "處理中…" : "全部標為已讀" }}
+    </button> </PageHeading
+  ><FieldErrors :message="error" />
   <section class="panel">
     <template v-if="isAudit"
       ><form class="filter-bar audit-filters" @submit.prevent="load()">
@@ -172,6 +196,7 @@ watch(
             ><button
               v-if="!item.read_at"
               class="btn ghost small"
+              :disabled="markingAll || busy"
               @click="read(item)"
             >
               <Check :size="14" />標記已讀

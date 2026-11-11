@@ -12,7 +12,7 @@ import {
 } from "@lucide/vue";
 import { useAuth } from "../stores/auth";
 import { useUi } from "../stores/ui";
-import { api, post, errorText } from "../api";
+import { post, errorText } from "../api";
 import FieldErrors from "../components/FieldErrors.vue";
 const route = useRoute(),
   router = useRouter(),
@@ -24,10 +24,7 @@ const username = ref(""),
   confirmPassword = ref(""),
   show = ref(false),
   busy = ref(false),
-  error = ref(""),
-  done = ref(""),
-  purpose = ref(""),
-  tokenReady = ref(false);
+  error = ref("");
 const mode = computed(() =>
   route.params.raw
     ? "token"
@@ -39,37 +36,26 @@ const mode = computed(() =>
 );
 const title = computed(() =>
   mode.value === "login"
-    ? "登入資訊管家"
+    ? "登入贊耀服務平台"
     : mode.value === "forgot"
       ? "忘記密碼"
       : mode.value === "password"
         ? "設定個人密碼"
-        : purpose.value === "verify"
-          ? "驗證您的信箱"
-          : "設定新密碼",
+        : "連結已停用",
+);
+const done = computed(() =>
+  ["forgot", "token"].includes(mode.value)
+    ? "請聯絡贊耀公司人員確認身分並重設臨時密碼。使用臨時密碼登入後，必須先設定自己的密碼才能繼續使用。"
+    : "",
 );
 watch(
   () => route.fullPath,
-  async () => {
+  () => {
     error.value = "";
-    done.value = "";
     password.value = "";
     newPassword.value = "";
     confirmPassword.value = "";
-    tokenReady.value = false;
-    if (mode.value === "token") {
-      try {
-        const d = await api(
-          "auth/token/" + encodeURIComponent(String(route.params.raw)) + "/",
-        );
-        purpose.value = d.purpose;
-        tokenReady.value = true;
-      } catch (e) {
-        error.value = errorText(e);
-      }
-    }
   },
-  { immediate: true },
 );
 async function submit() {
   error.value = "";
@@ -81,34 +67,18 @@ async function submit() {
       await router.push(
         auth.user?.must_change_password ? "/accounts/password/" : "/",
       );
-    } else if (mode.value === "forgot") {
-      const d = await post("auth/forgot/", { username: username.value });
-      done.value = d.message;
     } else if (mode.value === "password") {
-      const d = await post("auth/password/", {
+      const data = await post("auth/password/", {
         old_password: password.value,
         new_password1: newPassword.value,
         new_password2: confirmPassword.value,
       });
-      auth.user = d.user;
+      auth.user = data.user;
       password.value = "";
       newPassword.value = "";
       confirmPassword.value = "";
-      ui.notify(d.message);
+      ui.notify(data.message);
       await router.push("/");
-    } else {
-      const d = await post(
-        "auth/token/" + encodeURIComponent(String(route.params.raw)) + "/",
-        {
-          new_password1: newPassword.value,
-          new_password2: confirmPassword.value,
-        },
-      );
-      newPassword.value = "";
-      confirmPassword.value = "";
-      done.value = d.message;
-      await auth.load();
-      tokenReady.value = false;
     }
   } catch (e) {
     error.value = errorText(e);
@@ -121,8 +91,9 @@ async function submit() {
   <div class="auth-page">
     <div class="auth-top">
       <RouterLink to="/" class="auth-brand"
-        ><span class="brand-mark">Z</span><strong>資訊管家</strong></RouterLink
-      ><span>企業 IT 服務平台</span>
+        ><span class="brand-mark">Z</span
+        ><strong>贊耀服務平台</strong></RouterLink
+      ><span>贊耀電腦｜銷售・維修・資訊服務</span>
     </div>
     <main class="auth-main">
       <section class="auth-card">
@@ -138,12 +109,10 @@ async function submit() {
             mode === "login"
               ? "使用管理者提供的帳號，掌握報修與維修進度。"
               : mode === "forgot"
-                ? "輸入登入帳號，我們將寄送密碼重設通知。"
+                ? "不提供Email自助重設，請聯絡贊耀公司人員。"
                 : mode === "password"
                   ? "請設定只有您知道的密碼，完成後即可繼續。"
-                  : purpose === "verify"
-                    ? "確認後，這個信箱即可使用密碼復原功能。"
-                    : "連結只能使用一次，請設定新的個人密碼。"
+                  : "舊的驗證與密碼重設連結已停止使用。"
           }}
         </p>
         <FieldErrors :message="error" />
@@ -151,7 +120,7 @@ async function submit() {
           <CheckCircle2 :size="18" />{{ done }}
         </div>
         <form v-if="!done" @submit.prevent="submit">
-          <label v-if="mode === 'login' || mode === 'forgot'"
+          <label v-if="mode === 'login'"
             >登入帳號<input
               v-model="username"
               name="username"
@@ -178,11 +147,7 @@ async function submit() {
               >
                 <EyeOff v-if="show" :size="18" /><Eye v-else :size="18" />
               </button></div></label
-          ><template
-            v-if="
-              mode === 'password' ||
-              (mode === 'token' && purpose === 'reset' && tokenReady)
-            "
+          ><template v-if="mode === 'password'"
             ><label
               >新密碼<input
                 v-model="newPassword"
@@ -200,23 +165,9 @@ async function submit() {
                 autocomplete="new-password"
                 placeholder="再次輸入新密碼"
                 required /></label></template
-          ><button
-            class="btn primary full"
-            :disabled="busy || (mode === 'token' && !tokenReady)"
-          >
+          ><button class="btn primary full" :disabled="busy">
             <span v-if="busy" class="spinner"></span
-            >{{
-              busy
-                ? "處理中…"
-                : mode === "login"
-                  ? "登入"
-                  : mode === "forgot"
-                    ? "寄送重設通知"
-                    : mode === "password"
-                      ? "設定密碼並繼續"
-                      : purpose === "verify"
-                        ? "確認驗證信箱"
-                        : "儲存新密碼"
+            >{{ busy ? "處理中…" : mode === "login" ? "登入" : "設定密碼並繼續"
             }}<ArrowRight v-if="!busy" :size="17" />
           </button>
         </form>
@@ -242,12 +193,12 @@ async function submit() {
             mode === "login"
               ? "首次登入需更換管理者提供的臨時密碼。"
               : mode === "forgot"
-                ? "未設定Email或無法收信，請聯絡資訊公司管理者。"
-                : "密碼與驗證資訊不會儲存在瀏覽器快取。"
+                ? "贊耀公司人員重設的臨時密碼有效24小時。"
+                : "不再提供Email驗證或重設連結。"
           }}</span>
         </div>
       </section>
-      <p class="auth-footer">ZY-Info · 資訊管家</p>
+      <p class="auth-footer">ZY-Info · 贊耀服務平台</p>
     </main>
   </div>
 </template>

@@ -278,7 +278,7 @@ onBeforeUnmount(() => {
         </div>
         <div class="form-section border-top">
           <h3>圖片與附件</h3>
-          <p class="muted">錯誤畫面或照片，有助於工程師判斷問題。</p>
+          <p class="muted">錯誤畫面或照片，有助於負責人判斷問題。</p>
           <AttachmentPicker ref="picker" v-model="files" />
         </div>
         <div class="panel-footer">
@@ -317,7 +317,7 @@ onBeforeUnmount(() => {
     </form>
     <section v-else-if="company" class="panel empty-state">
       <h3>公司尚未發布報修表單</h3>
-      <p>請聯絡資訊公司管理者。</p>
+      <p>請聯絡贊耀公司人員。</p>
     </section></template
   >
 </template>

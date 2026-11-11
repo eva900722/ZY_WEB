@@ -73,9 +73,16 @@ class UserForm(forms.ModelForm):
         company = d.get("company")
         if role in ["reporter", "company_admin"] and not company:
             self.add_error("company", "公司角色必須選擇公司")
-        if role in ["engineer", "it_admin"] and company:
-            self.add_error("company", "資訊公司角色不能指定客戶公司")
+        if role == "it_admin" and company:
+            self.add_error("company", "贊耀公司角色不能指定客戶公司")
         if self.instance.pk and company != self.instance.company:
             # Role/company transitions require a separate migration workflow.
             self.add_error(None, "既有帳號不支援變更公司，請另建帳號以保留歷史權限")
         return d
+
+
+class ProfileForm(forms.ModelForm):
+    class Meta:
+        model = User
+        fields = ["display_name", "phone", "mobile", "email"]
+        labels = {"display_name": "顯示姓名", "phone": "電話／分機", "mobile": "手機", "email": "Email（選填）"}

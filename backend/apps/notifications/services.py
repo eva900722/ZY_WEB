@@ -5,7 +5,7 @@ from .models import Notification, Delivery
 from apps.accounts.models import User
 
 
-def event(ticket, event_name, message):
+def event(ticket, event_name, message, *, send_email=False):
     ids = {ticket.reporter_id}
     if ticket.engineer_id:
         ids.add(ticket.engineer_id)
@@ -30,6 +30,8 @@ def event(ticket, event_name, message):
         Notification.objects.create(user=user, ticket=ticket, message=message)
         if user.email:
             emails.add(user.email)
+    if not send_email:
+        return
     for recipient in ticket.company.recipients.filter(is_active=True):
         if event_name in recipient.events:
             emails.add(recipient.email)

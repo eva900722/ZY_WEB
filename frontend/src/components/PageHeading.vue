@@ -4,7 +4,7 @@ defineProps<{ title: string; subtitle?: string }>();
 <template>
   <div class="page-heading">
     <div>
-      <p class="eyebrow">ZY INFO · SERVICE DESK</p>
+      <p class="eyebrow">贊耀服務平台</p>
       <h1>{{ title }}</h1>
       <p v-if="subtitle" class="muted">{{ subtitle }}</p>
     </div>

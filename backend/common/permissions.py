@@ -16,15 +16,13 @@ def tickets_for(user):
     )
     if user.role == User.Role.IT_ADMIN:
         return qs
-    if user.role == User.Role.ENGINEER:
-        return qs.filter(engineer=user)
     if user.role == User.Role.COMPANY_ADMIN:
         return qs.filter(company_id=user.company_id)
     return qs.filter(company_id=user.company_id, reporter=user)
 
 
 def internal_allowed(user):
-    return user.role in [User.Role.IT_ADMIN, User.Role.ENGINEER]
+    return user.role in [User.Role.IT_ADMIN]
 
 
 def entries_for(user, ticket):

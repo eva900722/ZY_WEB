@@ -127,7 +127,7 @@ def users(request, pk=None):
             ).count()
             <= 1
         ):
-            raise ValidationError({"message": "必須保留至少一位可用資訊公司管理者"})
+            raise ValidationError({"message": "必須保留至少一位可用贊耀公司人員"})
         user = form.save(commit=False)
         if existing and existing.email != user.email:
             user.email_verified_at = None
@@ -173,14 +173,14 @@ def user_action(request, pk):
             ).count()
             <= 1
         ):
-            raise ValidationError({"message": "必須保留至少一位可用資訊公司管理者"})
+            raise ValidationError({"message": "必須保留至少一位可用贊耀公司人員"})
         if (
             action in ["disable", "delete"]
             and user.assigned_tickets.exclude(
                 status__in=["closed", "cancelled"]
             ).exists()
         ):
-            raise ValidationError({"message": "此帳號仍有未結案件，請先改派"})
+            raise ValidationError({"message": "此帳號仍有未結案件，請先交接"})
         user.is_active = action == "enable"
         if action == "delete":
             user.deleted_at = timezone.now()
@@ -261,7 +261,7 @@ def versions(request, pk=None):
 
 
 @api_view(["GET", "POST"])
-def notifications(request, pk=None):
+def notifications(request, pk=None, read_all=False):
     q = (
         request.user.notifications.filter(
             Q(ticket__isnull=True) | Q(ticket__in=tickets_for(request.user))
@@ -269,6 +269,11 @@ def notifications(request, pk=None):
         .select_related("ticket")
         .order_by("-pk")
     )
+    if read_all:
+        if request.method != "POST":
+            return Response({"message": "請使用POST標記已讀"}, status=405, headers={"Allow": "POST, OPTIONS"})
+        updated = q.filter(read_at__isnull=True).update(read_at=timezone.now())
+        return Response({"message": "已全部標記已讀", "updated": updated})
     if request.method == "POST":
         n = get_object_or_404(q, pk=pk)
         n.read_at = timezone.now()

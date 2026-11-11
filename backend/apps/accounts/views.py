@@ -3,7 +3,6 @@ from datetime import timedelta
 from django import forms
 from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.forms import SetPasswordForm
 from django.contrib import messages
 from django.db import transaction
 from django.shortcuts import render, redirect, get_object_or_404
@@ -12,13 +11,9 @@ from django.core.exceptions import ValidationError
 from django.views.decorators.http import require_POST
 from .models import User, LoginAttempt, ActionToken
 from .forms import LoginForm, PasswordForm, UserForm
-from .services import temporary_password, issue_token, consume_token, digest
+from .services import temporary_password, EMAIL_RECOVERY_DISABLED
 from common.permissions import require
 from apps.audit.services import log
-
-
-class ForgotForm(forms.Form):
-    username = forms.CharField(label="登入帳號", max_length=150)
 
 
 def login_view(request):
@@ -104,80 +99,17 @@ def password_view(request):
 
 
 def forgot(request):
-    form = ForgotForm(request.POST or None)
-    if request.method == "POST" and form.is_valid():
-        user = User.objects.filter(
-            username=form.cleaned_data["username"].lower(),
-            is_active=True,
-            deleted_at__isnull=True,
-        ).first()
-        if (
-            user
-            and user.email
-            and user.email_verified_at
-            and (not user.company_id or user.company.is_active)
-        ):
-            issue_token(user, "reset")
-        messages.success(
-            request,
-            "若帳號已設定可用且已驗證的 Email，系統將寄送重設通知。無 Email 或無法收信請聯絡資訊公司管理者。",
-        )
-        return redirect("forgot")
-    return render(
-        request,
-        "generic_form.html",
-        {
-            "form": form,
-            "title": "忘記密碼",
-            "subtitle": "無 Email 的使用者請聯絡資訊公司管理者重設臨時密碼。",
-        },
-    )
+    return render(request, "message.html", {"title": EMAIL_RECOVERY_DISABLED})
 
 
 def token_view(request, raw):
-    token = (
-        ActionToken.objects.select_related("user").filter(digest=digest(raw)).first()
-    )
-    valid = token and not token.used_at and token.expires_at > timezone.now()
-    form = (
-        SetPasswordForm(token.user, request.POST or None)
-        if valid and token.purpose == "reset"
-        else None
-    )
-    if not valid:
-        return render(
-            request, "message.html", {"title": "連結無效或已過期"}, status=400
-        )
-    if request.method == "POST" and (form is None or form.is_valid()):
-        try:
-            purpose = consume_token(
-                raw, form.cleaned_data["new_password1"] if form else None
-            )
-        except ValidationError as e:
-            return render(
-                request, "message.html", {"title": "連結無效或已過期"}, status=400
-            )
-        messages.success(
-            request, "Email 已驗證" if purpose == "verify" else "密碼已重設，請重新登入"
-        )
-        return redirect("login")
-    response = render(
-        request,
-        "generic_form.html",
-        {"form": form, "title": "設定新密碼" if form else "確認驗證 Email"},
-    )
-    response["Referrer-Policy"] = "no-referrer"
-    response["Cache-Control"] = "no-store"
-    return response
+    return render(request, "message.html", {"title": EMAIL_RECOVERY_DISABLED}, status=410)
 
 
 @login_required
 @require_POST
 def verify_email(request):
-    if request.user.email and not request.user.email_verified_at:
-        issue_token(request.user, "verify")
-        messages.success(request, "驗證信已排入寄送")
-    return redirect("dashboard")
+    return render(request, "message.html", {"title": EMAIL_RECOVERY_DISABLED}, status=410)
 
 
 def managed_users(actor):
@@ -223,7 +155,7 @@ def user_edit(request, pk=None):
                 ).count()
                 <= 1
             ):
-                form.add_error(None, "必須保留至少一位可用資訊公司管理者")
+                form.add_error(None, "必須保留至少一位可用贊耀公司人員")
                 return render(
                     request, "generic_form.html", {"form": form, "title": "修改帳號"}
                 )
@@ -286,7 +218,7 @@ def user_action(request, pk, action):
             ).count()
             <= 1
         ):
-            messages.error(request, "必須保留至少一位可用資訊公司管理者")
+            messages.error(request, "必須保留至少一位可用贊耀公司人員")
             return redirect("users")
         if (
             action in ["disable", "delete"]
@@ -294,7 +226,7 @@ def user_action(request, pk, action):
                 status__in=["closed", "cancelled"]
             ).exists()
         ):
-            messages.error(request, "此帳號仍有未結案件，請先改派")
+            messages.error(request, "此帳號仍有未結案件，請先交接")
             return redirect("users")
         user.is_active = action == "enable"
         if action == "delete":

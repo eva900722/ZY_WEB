@@ -32,18 +32,18 @@ class TicketForm(forms.Form):
 
 class EntryForm(forms.Form):
     body = forms.CharField(label="補充說明", max_length=20000, widget=forms.Textarea)
-    internal = forms.BooleanField(label="僅資訊公司可見（內部備註）", required=False)
+    internal = forms.BooleanField(label="僅贊耀公司可見（內部備註）", required=False)
     revision = forms.IntegerField(widget=forms.HiddenInput)
 
 
 class AssignmentForm(forms.Form):
     engineer = forms.ModelChoiceField(
-        label="負責工程師",
+        label="負責人",
         queryset=User.objects.filter(
-            role="engineer", is_active=True, deleted_at__isnull=True
+            role="it_admin", is_active=True, deleted_at__isnull=True
         ),
     )
-    reason = forms.CharField(label="派工／改派原因", max_length=500)
+    reason = forms.CharField(label="交接原因", max_length=500)
     revision = forms.IntegerField(widget=forms.HiddenInput)
 
 

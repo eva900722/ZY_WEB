@@ -5,24 +5,19 @@ import {
   Plus,
   Search,
   Download,
-  ArrowUpRight,
   Inbox,
   Clock3,
   MessageSquare,
   CheckCircle2,
-  MailCheck,
 } from "@lucide/vue";
-import { api, post, errorText, dateText } from "../api";
+import { api, errorText, dateText } from "../api";
 import { useAuth } from "../stores/auth";
-import { useUi } from "../stores/ui";
 import PageHeading from "../components/PageHeading.vue";
 import StatusBadge from "../components/StatusBadge.vue";
 import Pagination from "../components/Pagination.vue";
 import FieldErrors from "../components/FieldErrors.vue";
 const auth = useAuth(),
-  ui = useUi(),
   company = ref(""),
-  verifying = ref(false),
   data = ref<any>({
     items: [],
     counts: {},
@@ -58,17 +53,6 @@ async function load(page = 1) {
     busy.value = false;
   }
 }
-async function verify() {
-  verifying.value = true;
-  try {
-    const d = await post("auth/verify/", {});
-    ui.notify(d.message);
-  } catch (e) {
-    error.value = errorText(e);
-  } finally {
-    verifying.value = false;
-  }
-}
 onMounted(() => load());
 </script>
 <template>
@@ -76,33 +60,18 @@ onMounted(() => load());
     title="案件總覽"
     :subtitle="
       auth.isAdmin
-        ? '集中掌握各公司的服務需求與處理進度。'
-        : auth.isEngineer
-          ? '優先處理目前指派給您的維修工作。'
-          : '追蹤報修進度，讓工作順利進行。'
+        ? '查看全部案件、接手處理或協助同事。'
+        : '追蹤報修進度，讓工作順利進行。'
     "
-    ><RouterLink v-if="!auth.isEngineer" to="/tickets/new/" class="btn primary"
+    ><RouterLink v-if="!auth.isAdmin" to="/tickets/new/" class="btn primary"
       ><Plus :size="17" />新增報修</RouterLink
     ></PageHeading
   ><FieldErrors :message="error" />
-  <div
-    v-if="auth.user?.email && !auth.user.email_verified"
-    class="email-reminder"
-  >
-    <MailCheck :size="20" />
-    <div>
-      <strong>驗證信箱，接收服務通知</strong
-      ><small>驗證後也能使用忘記密碼功能。</small>
-    </div>
-    <button class="btn secondary small" :disabled="verifying" @click="verify">
-      {{ verifying ? "處理中…" : "寄送驗證信" }}
-    </button>
-  </div>
   <div class="stat-grid">
     <div class="stat-card">
       <span class="stat-icon amber"><Inbox :size="20" /></span>
       <div>
-        <span>待派工</span><strong>{{ data.counts.unassigned || 0 }}</strong>
+        <span>待接手</span><strong>{{ data.counts.unassigned || 0 }}</strong>
       </div>
       <small>等待安排人員</small>
     </div>
@@ -184,15 +153,19 @@ onMounted(() => load());
       </div>
       <template v-else
         ><div class="desktop-table table-scroll">
-          <table>
+          <table class="case-table">
+            <colgroup>
+              <col class="case-number-column" />
+              <col />
+              <col class="case-status-column" />
+              <col class="case-time-column" />
+            </colgroup>
             <thead>
               <tr>
-                <th>單號／問題</th>
-                <th>公司／報修人</th>
+                <th>問題單號</th>
+                <th>報修公司</th>
                 <th>狀態</th>
-                <th>負責工程師</th>
                 <th>更新時間</th>
-                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -200,47 +173,40 @@ onMounted(() => load());
                 <td>
                   <RouterLink
                     :to="'/tickets/' + t.id + '/'"
-                    class="ticket-title"
-                    >{{ t.title }}</RouterLink
-                  ><small class="ticket-number">{{ t.number }}</small>
+                    class="case-number-link"
+                    >{{ t.number }}</RouterLink
+                  >
                 </td>
-                <td>
-                  {{ t.company_name }}<small>{{ t.reporter_name }}</small>
-                </td>
+                <td>{{ t.company_name }}</td>
                 <td>
                   <StatusBadge :status="t.status" :label="t.status_label" />
                 </td>
-                <td>{{ t.engineer_name }}</td>
                 <td class="muted nowrap">{{ dateText(t.updated_at) }}</td>
-                <td>
-                  <RouterLink
-                    :to="'/tickets/' + t.id + '/'"
-                    class="icon-button"
-                    aria-label="查看案件"
-                    ><ArrowUpRight :size="17"
-                  /></RouterLink>
-                </td>
               </tr>
             </tbody>
           </table>
         </div>
         <div class="mobile-ticket-list">
-          <RouterLink
-            v-for="t in data.items"
-            :key="t.id"
-            :to="'/tickets/' + t.id + '/'"
-            class="mobile-ticket"
-            ><div class="row between">
-              <small>{{ t.company_name }}</small
-              ><StatusBadge :status="t.status" :label="t.status_label" />
-            </div>
-            <h3>{{ t.title }}</h3>
-            <p>{{ t.number }}</p>
-            <div class="row between">
-              <span>{{ t.engineer_name }}</span
-              ><small>{{ dateText(t.updated_at) }}</small>
-            </div></RouterLink
-          >
+          <article v-for="t in data.items" :key="t.id" class="mobile-ticket">
+            <dl class="case-mobile-fields">
+              <dt>問題單號</dt>
+              <dd>
+                <RouterLink
+                  :to="'/tickets/' + t.id + '/'"
+                  class="case-number-link"
+                  >{{ t.number }}</RouterLink
+                >
+              </dd>
+              <dt>報修公司</dt>
+              <dd>{{ t.company_name }}</dd>
+              <dt>狀態</dt>
+              <dd>
+                <StatusBadge :status="t.status" :label="t.status_label" />
+              </dd>
+              <dt>更新時間</dt>
+              <dd class="muted">{{ dateText(t.updated_at) }}</dd>
+            </dl>
+          </article>
         </div></template
       ><Pagination
         :page="data.page"
@@ -251,3 +217,90 @@ onMounted(() => load());
   </section>
   <p class="page-hint">報表依目前篩選條件匯出，最多1,000件。</p>
 </template>
+
+<style scoped>
+.case-table {
+  table-layout: fixed;
+  font-size: 14px;
+  color: #334155;
+}
+.case-table col {
+  width: 25%;
+}
+.case-table th {
+  color: #111827;
+  font-size: 14px;
+  font-weight: 700;
+}
+.case-table td {
+  overflow-wrap: anywhere;
+}
+.case-table td.muted,
+.case-mobile-fields dd.muted {
+  color: #475569;
+}
+.case-table :deep(.status),
+.case-mobile-fields :deep(.status) {
+  font-size: 12px;
+}
+
+.case-number-link {
+  display: inline-block;
+  max-width: calc(100% / 1.05);
+  padding: 4px 0;
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  transform-origin: left center;
+  transition:
+    transform 180ms ease,
+    color 180ms ease;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+.case-number-link:focus-visible {
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+@media (hover: hover) {
+  .case-number-link:hover {
+    transform: scale(1.05);
+    color: #1d4ed8;
+    text-decoration: underline;
+  }
+  .case-table tbody tr:hover {
+    background: #eff6ff;
+  }
+}
+.case-mobile-fields {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px 12px;
+  margin: 0;
+  font-size: 14px;
+}
+.case-mobile-fields dt {
+  color: #111827;
+  font-weight: 700;
+}
+.case-mobile-fields dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.case-mobile-fields .case-number-link {
+  min-height: 44px;
+  align-content: center;
+}
+@media (prefers-reduced-motion: reduce) {
+  .case-number-link {
+    transition: none;
+  }
+  .case-number-link:hover {
+    transform: none;
+  }
+}
+</style>

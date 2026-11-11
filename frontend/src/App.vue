@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref, watch } from "vue";
+import {
+  computed,
+  onMounted,
+  onBeforeUnmount,
+  reactive,
+  ref,
+  watch,
+} from "vue";
 import { useRoute, useRouter, RouterLink, RouterView } from "vue-router";
 import {
-  LayoutDashboard,
-  Plus,
   Building2,
-  Users,
-  SlidersHorizontal,
   Bell,
-  ScrollText,
   LogOut,
   Menu,
   X,
@@ -16,8 +18,8 @@ import {
   RefreshCw,
   WifiOff,
   ChevronRight,
-  KeyRound,
 } from "@lucide/vue";
+import { navigationModules, moduleOwnsPath } from "./navigation";
 import { registerSW } from "virtual:pwa-register";
 import { useAuth } from "./stores/auth";
 import { useUi } from "./stores/ui";
@@ -35,37 +37,20 @@ const open = ref(false),
 const authScreen = computed(
   () => route.meta.public || route.path.includes("/password"),
 );
+const modules = computed(() => navigationModules(auth.user?.role || ""));
 const navigation = computed(() =>
-  [
-    { path: "/", label: "案件總覽", icon: LayoutDashboard, show: true },
-    {
-      path: "/tickets/new/",
-      label: "新增報修",
-      icon: Plus,
-      show: !auth.isEngineer,
-    },
-    { path: "/notifications/", label: "通知中心", icon: Bell, show: true },
-    { path: "/users/", label: "帳號管理", icon: Users, show: auth.isManager },
-    {
-      path: "/companies/",
-      label: "公司管理",
-      icon: Building2,
-      show: auth.isAdmin,
-    },
-    {
-      path: "/versions/",
-      label: "報修表單",
-      icon: SlidersHorizontal,
-      show: auth.isAdmin,
-    },
-    {
-      path: "/audit/",
-      label: "操作紀錄",
-      icon: ScrollText,
-      show: auth.isAdmin,
-    },
-  ].filter((x) => x.show),
+  modules.value.flatMap((module) => module.items),
 );
+const activeModule = computed(() =>
+  modules.value.find((module) => moduleOwnsPath(module, route.path)),
+);
+const expanded = reactive<Record<string, boolean>>({});
+function moduleOpen(id: string) {
+  return (
+    expanded[id] ??
+    (activeModule.value?.id === id || modules.value.length === 1)
+  );
+}
 function active(path: string) {
   return path === "/"
     ? route.path === "/"
@@ -139,10 +124,12 @@ watch(
   () => route.fullPath,
   () => {
     open.value = false;
+    if (activeModule.value) expanded[activeModule.value.id] = true;
     loadUnread();
   },
 );
 onMounted(() => {
+  window.addEventListener("notifications-updated", loadUnread);
   window.addEventListener("online", connectivity);
   window.addEventListener("offline", connectivity);
   window.addEventListener("beforeunload", beforeUnload);
@@ -159,6 +146,7 @@ onMounted(() => {
 });
 onBeforeUnmount(() => {
   clearInterval(interval);
+  window.removeEventListener("notifications-updated", loadUnread);
   window.removeEventListener("online", connectivity);
   window.removeEventListener("offline", connectivity);
   window.removeEventListener("beforeunload", beforeUnload);
@@ -190,27 +178,56 @@ onBeforeUnmount(() => {
     <aside class="sidebar" :class="{ open }">
       <RouterLink to="/" class="brand"
         ><span class="brand-mark">Z</span>
-        <div>資訊管家<small>ZY INFO · SERVICE DESK</small></div></RouterLink
+        <div>
+          贊耀服務平台<small>贊耀電腦｜銷售・維修・資訊服務</small>
+        </div></RouterLink
       >
-      <p class="nav-section">工作空間</p>
-      <nav>
-        <RouterLink
-          v-for="item in navigation"
-          :key="item.path"
-          :to="item.path"
-          :class="{ active: active(item.path) }"
-          ><component :is="item.icon" :size="19" /><span>{{ item.label }}</span
-          ><span
-            v-if="item.path === '/notifications/' && unread"
-            class="nav-count"
-            >{{ unread }}</span
-          ></RouterLink
-        >
-      </nav>
+      <div class="module-navigation">
+        <section v-for="module in modules" :key="module.id" class="nav-module">
+          <button
+            type="button"
+            class="module-toggle"
+            :class="{ current: activeModule?.id === module.id }"
+            :aria-expanded="moduleOpen(module.id)"
+            :aria-controls="'module-' + module.id"
+            @click="expanded[module.id] = !moduleOpen(module.id)"
+          >
+            <component :is="module.icon" :size="18" /><span>{{
+              module.label
+            }}</span>
+            <ChevronRight
+              :size="16"
+              class="module-caret"
+              :class="{ expanded: moduleOpen(module.id) }"
+            />
+          </button>
+          <nav
+            v-show="moduleOpen(module.id)"
+            :id="'module-' + module.id"
+            :aria-label="module.label"
+            class="module-links"
+          >
+            <RouterLink
+              v-for="item in module.items"
+              :key="item.path"
+              :to="item.path"
+              :class="{ active: active(item.path) }"
+              :aria-current="active(item.path) ? 'page' : undefined"
+            >
+              <component :is="item.icon" :size="19" /><span>{{
+                item.label
+              }}</span>
+              <span
+                v-if="item.path === '/notifications/' && unread"
+                class="nav-count"
+                >{{ unread }}</span
+              >
+            </RouterLink>
+          </nav>
+        </section>
+      </div>
       <div class="sidebar-bottom">
         <button @click="install"><Download :size="17" />安裝到裝置</button
-        ><RouterLink to="/accounts/password/"
-          ><KeyRound :size="17" />修改密碼</RouterLink
         ><button @click="logout"><LogOut :size="17" />登出系統</button
         ><small>ZY-Info © 2026</small>
       </div>
@@ -225,8 +242,11 @@ onBeforeUnmount(() => {
           <Menu :size="22" />
         </button>
         <div class="breadcrumb">
-          <span>工作空間</span><ChevronRight :size="14" /><strong>{{
-            navigation.find((x) => active(x.path))?.label || "案件詳情"
+          <span>{{ activeModule?.label || "贊耀服務平台" }}</span
+          ><ChevronRight :size="14" /><strong>{{
+            route.path === "/settings/profile/"
+              ? "個人設定"
+              : navigation.find((x) => active(x.path))?.label || "案件詳情"
           }}</strong>
         </div>
         <div class="topbar-right">
@@ -238,22 +258,34 @@ onBeforeUnmount(() => {
             aria-label="通知中心"
             ><Bell :size="19" /><i v-if="unread"></i
           ></RouterLink>
-          <div class="avatar">{{ auth.user.display_name.slice(0, 1) }}</div>
-          <div class="user-info">
+          <RouterLink
+            to="/settings/profile/"
+            class="avatar"
+            aria-label="個人設定"
+            title="個人設定"
+            >{{ auth.user.display_name.slice(0, 1) }}</RouterLink
+          >
+          <RouterLink
+            to="/settings/profile/"
+            class="user-info"
+            aria-label="編輯個人資料"
+          >
             <strong>{{ auth.user.display_name }}</strong
             ><small>{{ auth.user.role_label }}</small>
-          </div>
+          </RouterLink>
         </div>
       </header>
       <main class="main-content"><RouterView /></main>
-      <footer class="app-footer">資訊管家 · 讓每一個問題都有進度。</footer>
+      <footer class="app-footer">贊耀服務平台 · 讓每一個問題都有進度。</footer>
     </div>
   </div>
   <div v-else class="boot-screen">
     <span class="brand-mark">Z</span>
     <p>
       {{
-        online ? "正在載入工作空間…" : "尚未連線，請恢復網路後再開啟工作空間。"
+        online
+          ? "正在載入贊耀服務平台…"
+          : "尚未連線，請恢復網路後再開啟贊耀服務平台。"
       }}
     </p>
     <button v-if="!online" class="btn" @click="reload">重新連線</button>
@@ -271,7 +303,7 @@ onBeforeUnmount(() => {
       >
         <X :size="20" />
       </button>
-      <h2>安裝資訊管家</h2>
+      <h2>安裝贊耀服務平台</h2>
       <p>在支援的Chrome或Edge瀏覽器，從網址列或選單選擇「安裝應用程式」。</p>
       <p>
         iPhone／iPad可在Safari分享選單選擇「加入主畫面」。安裝方式依裝置及瀏覽器而異。
@@ -281,3 +313,66 @@ onBeforeUnmount(() => {
     </section>
   </div>
 </template>
+
+<style scoped>
+.sidebar .brand {
+  margin: 0 4px 28px;
+  font-size: 17px;
+}
+.sidebar .brand-mark {
+  flex-shrink: 0;
+}
+.sidebar .brand div {
+  min-width: 0;
+}
+.sidebar .brand small {
+  line-height: 1.6;
+  letter-spacing: 0;
+}
+.module-navigation {
+  overflow-y: auto;
+  min-height: 0;
+}
+.nav-module + .nav-module {
+  margin-top: 8px;
+}
+.module-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: #1e3a5f;
+  color: #f8fafc;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  text-align: left;
+}
+.module-toggle span {
+  flex: 1;
+}
+.module-toggle.current {
+  color: #f8fafc;
+}
+.module-toggle:hover {
+  background: #24476f;
+}
+.module-toggle:focus-visible {
+  outline: 2px solid #22d3ee;
+  outline-offset: -2px;
+}
+.module-caret {
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+.module-caret.expanded {
+  transform: rotate(90deg);
+}
+.module-links {
+  margin: 5px 0 0 12px;
+}
+</style>

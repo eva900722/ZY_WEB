@@ -65,7 +65,8 @@ async function action(kind: string) {
         engineer: engineer.value,
         reason: assignmentReason.value,
       });
-    else Object.assign(data, { status: status.value, reason: reason.value });
+    else if (kind === "status")
+      Object.assign(data, { status: status.value, reason: reason.value });
     ticket.value = await post("tickets/" + route.params.id + "/", data);
     if (kind === "entry") {
       body.value = "";
@@ -107,7 +108,9 @@ watch(() => route.params.id, load);
 </script>
 <template>
   <div class="back-link">
-    <RouterLink to="/"><ArrowLeft :size="16" />案件總覽</RouterLink>
+    <RouterLink to="/" class="return-cases"
+      ><ArrowLeft :size="16" />返回案件總覽</RouterLink
+    >
   </div>
   <FieldErrors :message="error" />
   <div v-if="loading" class="loading-state">載入案件中…</div>
@@ -194,7 +197,9 @@ watch(() => route.params.id, load);
                   <strong>案件已建立</strong
                   ><time>{{ dateText(ticket.created_at) }}</time>
                 </div>
-                <p>{{ ticket.reporter_name }} 提交報修，等待資訊公司處理。</p>
+                <p>
+                  {{ ticket.reporter_name }} 提交報修，等待贊耀公司人員接手。
+                </p>
               </div>
             </article>
             <article
@@ -237,7 +242,7 @@ watch(() => route.params.id, load);
                 @input="ui.dirty = !!body || !!files.length"
               ></textarea></label
             ><label v-if="ticket.can_internal" class="checkbox-label"
-              ><input v-model="internal" type="checkbox" />僅資訊公司可見</label
+              ><input v-model="internal" type="checkbox" />僅贊耀公司可見</label
             ><AttachmentPicker ref="picker" v-model="files" /><button
               class="btn primary"
               :disabled="busy"
@@ -246,7 +251,11 @@ watch(() => route.params.id, load);
             </button>
           </form>
           <p v-else class="form-section muted">
-            案件已結案或取消，需由資訊公司管理者重新開啟後才能補充。
+            {{
+              ticket.can_claim
+                ? "請先領取案件，再補充處理紀錄。"
+                : "案件已結案或取消，需由贊耀公司人員重新開啟後才能補充。"
+            }}
           </p>
         </section>
       </section>
@@ -256,8 +265,7 @@ watch(() => route.params.id, load);
           <div class="service-person">
             <div class="avatar"><UserRound :size="19" /></div>
             <div>
-              <small>負責工程師</small
-              ><strong>{{ ticket.engineer_name }}</strong>
+              <small>負責人</small><strong>{{ ticket.engineer_name }}</strong>
             </div>
           </div>
           <div class="row muted">
@@ -269,30 +277,45 @@ watch(() => route.params.id, load);
             重新載入最新狀態
           </button>
         </section>
+        <section v-if="ticket.can_claim" class="panel">
+          <h3>接手案件</h3>
+          <p class="muted">
+            接手後由你負責處理；其他贊耀公司人員仍可查看及協助。
+          </p>
+          <button
+            class="btn primary full"
+            :disabled="busy"
+            @click="action('claim')"
+          >
+            接手處理
+          </button>
+        </section>
         <section
           v-if="
-            auth.isAdmin && !['closed', 'cancelled'].includes(ticket.status)
+            auth.isAdmin &&
+            !ticket.can_claim &&
+            !['closed', 'cancelled'].includes(ticket.status)
           "
           class="panel"
         >
-          <h3>指派／改派工程師</h3>
+          <h3>變更負責人</h3>
           <form @submit.prevent="action('assign')">
             <label
-              >負責工程師<select v-model="engineer" required name="engineer">
-                <option value="">請選擇工程師</option>
+              >負責人<select v-model="engineer" required name="engineer">
+                <option value="">請選擇贊耀公司人員</option>
                 <option v-for="u in ticket.engineers" :value="String(u.id)">
                   {{ u.name }}
                 </option>
               </select></label
             ><label
-              >指派原因<input
+              >交接原因<input
                 v-model="assignmentReason"
                 name="assignment_reason"
                 required
                 maxlength="500"
                 placeholder="說明本次安排" /></label
             ><button class="btn secondary full" :disabled="busy">
-              確認指派
+              確認交接
             </button>
           </form>
         </section>
@@ -321,3 +344,28 @@ watch(() => route.params.id, load);
     </div></template
   >
 </template>
+
+<style scoped>
+.back-link .return-cases {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 0;
+  border: 0;
+  background: transparent;
+  color: #1d4ed8;
+  font-size: 14px;
+  font-weight: 650;
+  transition: color 150ms ease;
+}
+.back-link .return-cases:hover {
+  color: #1e40af;
+  text-decoration: underline;
+}
+@media (prefers-reduced-motion: reduce) {
+  .back-link .return-cases {
+    transition: none;
+  }
+}
+</style>

@@ -3,6 +3,7 @@ from . import auth, tickets, management as m
 
 urlpatterns = [
     path("auth/session/", auth.session),
+    path("auth/profile/", auth.profile),
     path("auth/login/", auth.sign_in),
     path("auth/logout/", auth.sign_out),
     path("auth/password/", auth.password),
@@ -20,6 +21,7 @@ urlpatterns = [
     path("versions/", m.versions),
     path("versions/<int:pk>/", m.versions),
     path("notifications/", m.notifications),
+    path("notifications/read-all/", m.notifications, {"read_all": True}),
     path("notifications/<int:pk>/read/", m.notifications),
     path("audit/", m.audit),
 ]

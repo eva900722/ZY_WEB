@@ -15,14 +15,14 @@ export default defineConfig({
         "offline.html",
       ],
       manifest: {
-        name: "資訊管家 ZY-Info",
-        short_name: "資訊管家",
-        description: "企業 IT 報修與維修進度管理",
+        name: "贊耀服務平台",
+        short_name: "贊耀服務平台",
+        description: "贊耀電腦｜銷售・維修・資訊服務",
         start_url: "/",
         scope: "/",
         display: "standalone",
-        background_color: "#f4f6f8",
-        theme_color: "#123f37",
+        background_color: "#f4f7fb",
+        theme_color: "#0f172a",
         icons: [
           {
             src: "/pwa-192.png",

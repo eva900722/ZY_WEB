@@ -1,6 +1,6 @@
-# ZY_WEB｜資訊管家
+# ZY_WEB｜贊耀服務平台
 
-Vue 3＋PWA／Django API＋MySQL企業報修網站：四種角色、公司資料隔離、指定工程師處理、版本化報修表單、附件、操作紀錄、Email／站內通知及PDF／Excel匯出。
+Vue 3＋PWA／Django API＋MySQL企業報修網站：三種角色、公司資料隔離、贊耀公司人員接手與交接、版本化報修表單、附件、操作紀錄、Email／站內通知及PDF／Excel匯出。
 
 ## 文件
 

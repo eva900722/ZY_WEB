@@ -1,7 +1,6 @@
 import hashlib
 from datetime import timedelta
 from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
-from django.contrib.auth.forms import SetPasswordForm
 from django.middleware.csrf import get_token
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from django.db import transaction
@@ -11,9 +10,8 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
 from apps.accounts.models import User, LoginAttempt, ActionToken
-from apps.accounts.forms import LoginForm, PasswordForm
-from apps.accounts.views import ForgotForm
-from apps.accounts.services import issue_token, consume_token, digest
+from apps.accounts.forms import LoginForm, PasswordForm, ProfileForm
+from apps.accounts.services import EMAIL_RECOVERY_DISABLED
 from apps.audit.services import log
 from .helpers import valid, user_data
 
@@ -102,55 +100,35 @@ def password(request):
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def forgot(request):
-    data = valid(ForgotForm(request.data))
-    user = User.objects.filter(
-        username=data["username"].lower(), is_active=True, deleted_at__isnull=True
-    ).first()
-    if (
-        user
-        and user.email
-        and user.email_verified_at
-        and (not user.company_id or user.company.is_active)
-    ):
-        issue_token(user, "reset")
-    return Response(
-        {
-            "message": "若帳號已設定並驗證Email，將寄送重設通知。無法收信請聯絡資訊公司管理者。"
-        }
-    )
+    return Response({"message": EMAIL_RECOVERY_DISABLED})
 
 
-@csrf_protect
 @api_view(["GET", "POST"])
 @permission_classes([AllowAny])
 def token(request, raw):
-    t = (
-        ActionToken.objects.select_related("user", "user__company")
-        .filter(digest=digest(raw))
-        .first()
-    )
-    if (
-        not t
-        or t.used_at
-        or t.expires_at <= timezone.now()
-        or not t.user.is_active
-        or t.user.deleted_at
-        or t.email != t.user.email
-        or (t.user.company_id and not t.user.company.is_active)
-    ):
-        raise ValidationError({"message": "連結無效或已過期，請重新申請"})
-    if request.method == "GET":
-        return Response({"purpose": t.purpose})
-    data = valid(SetPasswordForm(t.user, request.data)) if t.purpose == "reset" else {}
-    purpose = consume_token(raw, data.get("new_password1"))
-    return Response(
-        {"message": "Email已驗證" if purpose == "verify" else "密碼已重設，請重新登入"}
-    )
+    return Response({"message": EMAIL_RECOVERY_DISABLED}, status=410)
 
 
 @api_view(["POST"])
 def verify(request):
-    if request.user.email and not request.user.email_verified_at:
-        issue_token(request.user, "verify")
-        return Response({"message": "驗證信已排入寄送，請查看最新信件"})
-    return Response({"message": "未設定Email或已完成驗證"})
+    return Response({"message": EMAIL_RECOVERY_DISABLED}, status=410)
+
+
+@api_view(["GET", "POST"])
+def profile(request):
+    if request.method == "GET":
+        return Response({"user": user_data(request.user)})
+    with transaction.atomic():
+        user = User.objects.select_for_update().get(pk=request.user.pk)
+        form = ProfileForm(request.data, instance=user)
+        data = valid(form)
+        changed = form.changed_data
+        if "email" in changed:
+            user.email_verified_at = None
+            ActionToken.objects.filter(user=user, used_at__isnull=True).update(used_at=timezone.now())
+        if changed:
+            for field in ProfileForm.Meta.fields:
+                setattr(user, field, data[field])
+            user.save(update_fields=changed + (["email_verified_at"] if "email" in changed else []))
+            log(user, "account.profile_updated", user.pk, company=user.company, details={"fields": changed}, request=request)
+    return Response({"user": user_data(user), "message": "個人資料已更新"})

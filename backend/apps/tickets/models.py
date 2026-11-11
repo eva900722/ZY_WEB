@@ -2,9 +2,20 @@ from django.db import models
 import uuid
 
 
+class DailyTicketCounter(models.Model):
+    company = models.ForeignKey("companies.Company", on_delete=models.PROTECT)
+    date = models.DateField()
+    last_number = models.PositiveBigIntegerField(default=0)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["company", "date"], name="unique_company_ticket_date")
+        ]
+
+
 class Ticket(models.Model):
     class Status(models.TextChoices):
-        UNASSIGNED = "unassigned", "待派工"
+        UNASSIGNED = "unassigned", "待接手"
         ASSIGNED = "assigned", "待處理"
         PROCESSING = "processing", "處理中"
         WAITING = "waiting", "待客戶回覆"

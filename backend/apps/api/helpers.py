@@ -80,7 +80,7 @@ def user_data(user):
             "must_change_password",
         ]
     } | {
-        "company_name": str(user.company) if user.company_id else "資訊公司",
+        "company_name": str(user.company) if user.company_id else "贊耀公司",
         "role_label": user.get_role_display(),
         "email_verified": bool(user.email_verified_at),
     }

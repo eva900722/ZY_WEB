@@ -8,12 +8,12 @@
     "Segoe UI",
     sans-serif;
   color: #243247;
-  background: #f4f6f8;
+  background: #f4f7fb;
   font-synthesis: none;
   font-size: 15px;
   line-height: 1.6;
-  --primary: #176953;
-  --primary-dark: #123f37;
+  --primary: #2563eb;
+  --primary-dark: #1e3a5f;
   --ink: #243247;
   --muted: #7b8797;
   --border: #e5e9ef;
@@ -56,7 +56,7 @@ button:disabled {
 }
 button:focus-visible,
 a:focus-visible {
-  outline: 3px solid #8acbb5;
+  outline: 3px solid #22d3ee;
   outline-offset: 3px;
 }
 h1,
@@ -143,18 +143,18 @@ small {
 .btn.primary {
   background: var(--primary);
   color: white;
-  box-shadow: 0 2px 3px #12634f15;
+  box-shadow: 0 2px 3px #2563eb15;
 }
 .btn.primary:hover:not(:disabled) {
-  background: #105b46;
+  background: #1d4ed8;
 }
 .btn.secondary {
-  background: #edf5f1;
-  color: #17634e;
-  border-color: #dcebe3;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #dbeafe;
 }
 .btn.secondary:hover {
-  background: #e2eee7;
+  background: #dbeafe;
 }
 .btn.ghost {
   background: #fff;
@@ -221,12 +221,12 @@ textarea::placeholder {
 input:focus,
 select:focus,
 textarea:focus {
-  border-color: #5b9d83;
-  box-shadow: 0 0 0 3px #1d765610;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px #2563eb1a;
 }
 input:disabled,
 select:disabled {
-  background: #f4f6f8;
+  background: #f4f7fb;
   color: #8b95a4;
 }
 input[type="checkbox"] {
@@ -341,8 +341,8 @@ input[type="checkbox"] {
 .auth-page {
   min-height: 100dvh;
   background:
-    radial-gradient(ellipse at 10% 90%, #d9e9e030, transparent 45%),
-    radial-gradient(ellipse at 95% 0%, #dae4e535, transparent 50%), #f5f7f8;
+    radial-gradient(ellipse at 10% 90%, #cffafe30, transparent 45%),
+    radial-gradient(ellipse at 95% 0%, #dbeafe35, transparent 50%), #f4f7fb;
 }
 .auth-top {
   height: 84px;
@@ -387,8 +387,8 @@ input[type="checkbox"] {
   width: 46px;
   height: 46px;
   border-radius: 13px;
-  background: #edf5f0;
-  color: #217456;
+  background: #eff6ff;
+  color: #2563eb;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -460,8 +460,8 @@ input[type="checkbox"] {
 }
 .sidebar {
   width: 228px;
-  background: #172d2a;
-  color: #b4c4be;
+  background: #0f172a;
+  color: #cbd5e1;
   position: fixed;
   left: 0;
   top: 0;
@@ -481,7 +481,7 @@ input[type="checkbox"] {
   font-weight: 650;
 }
 .sidebar .brand-mark {
-  background: #2b5348;
+  background: #1e3a5f;
   width: 37px;
   height: 37px;
   border-radius: 10px;
@@ -491,14 +491,14 @@ input[type="checkbox"] {
   display: block;
   font-size: 8px;
   letter-spacing: 1px;
-  color: #8eaaa0;
+  color: #94a3b8;
   font-weight: 500;
   margin-top: 1px;
 }
 .nav-section {
   font-size: 10px;
   letter-spacing: 1px;
-  color: #708e83;
+  color: #94a3b8;
   margin: 0 16px 12px;
 }
 .sidebar nav {
@@ -512,26 +512,27 @@ input[type="checkbox"] {
   align-items: center;
   gap: 12px;
   border-radius: 8px;
-  color: #a9beb4;
+  color: #cbd5e1;
   font-size: 13px;
   min-height: 44px;
 }
 .sidebar nav > a:hover {
-  background: #203b34;
-  color: #f2f8f4;
+  background: #1e293b;
+  color: #f8fafc;
 }
 .sidebar nav > a.active {
-  background: #284d40;
-  color: #e8f5ed;
+  background: #cffafe;
+  box-shadow: inset 3px 0 #22d3ee;
+  color: #164e63;
 }
 .sidebar nav > a.active svg {
-  color: #a1d6b6;
+  color: #0e7490;
 }
 .nav-count {
   margin-left: auto;
   font-size: 10px;
-  background: #476959;
-  color: #eef8f0;
+  background: #1e3a5f;
+  color: #e0f2fe;
   border-radius: 5px;
   padding: 1px 6px;
 }
@@ -550,18 +551,18 @@ input[type="checkbox"] {
   gap: 12px;
   align-items: center;
   padding: 10px 7px;
-  color: #8fa99c;
+  color: #94a3b8;
   font-size: 12px;
   text-align: left;
 }
 .sidebar-bottom button:hover,
 .sidebar-bottom a:hover {
-  color: #e2eee6;
+  color: #f8fafc;
 }
 .sidebar-bottom small {
   font-size: 10px;
-  color: #587367;
-  border-top: 1px solid #2d433a;
+  color: #94a3b8;
+  border-top: 1px solid #334155;
   margin-top: 12px;
   padding-top: 18px;
 }
@@ -612,8 +613,8 @@ input[type="checkbox"] {
 .avatar {
   width: 34px;
   height: 34px;
-  background: #e7eeea;
-  color: #54816d;
+  background: #e0f2fe;
+  color: #164e63;
   display: inline-flex;
   align-items: center;
   justify-content: center;

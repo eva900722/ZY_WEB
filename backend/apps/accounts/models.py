@@ -7,8 +7,7 @@ class User(AbstractUser):
     class Role(models.TextChoices):
         REPORTER = "reporter", "公司報修者"
         COMPANY_ADMIN = "company_admin", "公司管理者"
-        ENGINEER = "engineer", "資訊公司工程師"
-        IT_ADMIN = "it_admin", "資訊公司管理者"
+        IT_ADMIN = "it_admin", "贊耀公司人員"
 
     role = models.CharField(
         "角色", max_length=20, choices=Role.choices, default=Role.REPORTER
@@ -32,7 +31,7 @@ class User(AbstractUser):
             models.CheckConstraint(
                 condition=(
                     Q(role__in=["reporter", "company_admin"], company__isnull=False)
-                    | Q(role__in=["engineer", "it_admin"], company__isnull=True)
+                    | Q(role="it_admin", company__isnull=True)
                 ),
                 name="user_role_company_consistent",
             )

@@ -20,6 +20,6 @@ class Command(BaseCommand):
             deleted_at__isnull=True,
         ).first()
         if not user:
-            raise CommandError("找不到可用資訊公司管理者")
+            raise CommandError("找不到可用贊耀公司人員")
         raw = temporary_password(user, user)
         self.stdout.write("臨時密碼（僅此次顯示）：" + raw + "\n登入後必須更換。")

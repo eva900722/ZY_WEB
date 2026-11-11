@@ -26,6 +26,10 @@ const router = createRouter({
       alias: "/password",
       component: () => import("../views/AuthView.vue"),
     },
+    {
+      path: "/settings/profile/",
+      component: () => import("../views/ProfileView.vue"),
+    },
     { path: "/", component: () => import("../views/DashboardView.vue") },
     {
       path: "/tickets/new/",

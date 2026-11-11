@@ -5,7 +5,7 @@ from apps.accounts.services import temporary_password
 
 
 class Command(BaseCommand):
-    help = "建立第一位資訊公司管理者，輸出一次性臨時密碼。只允許尚無管理者時使用。"
+    help = "建立第一位贊耀公司人員，輸出一次性臨時密碼。只允許尚無管理者時使用。"
 
     def add_arguments(self, p):
         p.add_argument("--username", default="zyadmin")
@@ -20,7 +20,7 @@ class Command(BaseCommand):
         if not re.fullmatch(r"[a-z0-9][a-z0-9_.-]{2,149}", name):
             raise CommandError("帳號格式不正確")
         user = User.objects.create(
-            username=name, display_name="資訊管理者", role="it_admin", is_active=True
+            username=name, display_name="贊耀公司人員", role="it_admin", is_active=True
         )
         raw = temporary_password(user, user)
         self.stdout.write(

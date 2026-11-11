@@ -4,10 +4,8 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 from django.core.exceptions import ValidationError
-from django.contrib.auth.password_validation import validate_password
 from .models import User, ActionToken
 from apps.audit.services import log
-from apps.notifications.models import Delivery
 
 
 def digest(raw):
@@ -31,58 +29,12 @@ def temporary_password(actor, user):
     return raw
 
 
-@transaction.atomic
+EMAIL_RECOVERY_DISABLED = "不提供Email驗證或自助重設密碼。請聯絡贊耀公司人員確認身分並重設臨時密碼；登入後必須先更換自己的密碼。"
+
+
 def issue_token(user, purpose):
-    user = User.objects.select_for_update().get(pk=user.pk)
-    ActionToken.objects.filter(user=user, purpose=purpose, used_at__isnull=True).update(
-        used_at=timezone.now()
-    )
-    raw = secrets.token_urlsafe(32)
-    ActionToken.objects.create(
-        user=user,
-        purpose=purpose,
-        digest=digest(raw),
-        email=user.email,
-        expires_at=timezone.now() + timedelta(minutes=settings.TOKEN_MINUTES),
-    )
-    url = f"{settings.SITE_URL}/accounts/token/{raw}/"
-    Delivery.objects.create(
-        recipient=user.email,
-        subject="資訊管家：" + ("驗證 Email" if purpose == "verify" else "重設密碼"),
-        body="請於30分鐘內開啟連結：" + url,
-        next_attempt_at=timezone.now(),
-    )
-    return raw
+    raise ValidationError(EMAIL_RECOVERY_DISABLED)
 
 
-@transaction.atomic
 def consume_token(raw, password=None):
-    # Lock the user before token, matching issue_token/reset lock order.
-    found = ActionToken.objects.filter(digest=digest(raw)).first()
-    if not found:
-        raise ValidationError("連結無效或已過期")
-    user = User.objects.select_for_update().get(pk=found.user_id)
-    token = ActionToken.objects.select_for_update().get(pk=found.pk)
-    if (
-        token.used_at
-        or token.expires_at <= timezone.now()
-        or not user.is_active
-        or user.deleted_at
-        or (user.company_id and not user.company.is_active)
-        or token.email != user.email
-    ):
-        raise ValidationError("連結無效或已過期")
-    if token.purpose == "reset":
-        if not user.email_verified_at:
-            raise ValidationError("信箱尚未驗證")
-        validate_password(password, user)
-        user.set_password(password)
-        user.must_change_password = False
-        user.temporary_expires_at = None
-    else:
-        user.email_verified_at = timezone.now()
-    user.save()
-    token.used_at = timezone.now()
-    token.save(update_fields=["used_at"])
-    log(user, "account." + token.purpose, user.pk)
-    return token.purpose
+    raise ValidationError(EMAIL_RECOVERY_DISABLED)

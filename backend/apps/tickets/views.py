@@ -21,7 +21,7 @@ from common.permissions import (
 )
 from .models import Ticket
 from .forms import TicketForm, EntryForm, AssignmentForm, StatusForm
-from .services import create_ticket, assign, update_status, add_entry
+from .services import create_ticket, assign, claim, update_status, add_entry
 
 
 def filtered(user, params):
@@ -201,7 +201,7 @@ def new(request):
 def form_status(request, company_id):
     company = get_object_or_404(Company, is_active=True, pk=company_id)
     if request.user.role != "it_admin" and (
-        request.user.role == "engineer" or request.user.company_id != company.pk
+        request.user.company_id != company.pk
     ):
         raise PermissionDenied
     v = latest(company)
@@ -240,12 +240,6 @@ def detail(request, pk):
     statuses = transitions.get(ticket.status, [])
     if request.user.role in ["reporter", "company_admin"]:
         statuses = ["closed"] if ticket.status == "completed" else []
-    elif request.user.role == "engineer":
-        statuses = (
-            []
-            if ticket.status in ["closed", "cancelled"]
-            else [s for s in statuses if s not in ["closed", "cancelled"]]
-        )
     sf.fields["status"].choices = [(s, Ticket.Status(s).label) for s in statuses]
     if request.method == "POST":
         action = request.POST.get("action")
@@ -263,6 +257,10 @@ def detail(request, pk):
                         af.cleaned_data["reason"],
                     )
                     return redirect("ticket_detail", pk=pk)
+            elif action == "claim":
+                revision = forms.IntegerField(min_value=1).clean(request.POST.get("revision"))
+                claim(request.user, pk, revision)
+                return redirect("ticket_detail", pk=pk)
             elif action == "status":
                 sf = StatusForm(request.POST)
                 sf.fields["status"].choices = [

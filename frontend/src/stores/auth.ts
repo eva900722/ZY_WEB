@@ -19,7 +19,6 @@ export const useAuth = defineStore("auth", {
     isAdmin: (s) => s.user?.role === "it_admin",
     isManager: (s) =>
       ["it_admin", "company_admin"].includes(s.user?.role || ""),
-    isEngineer: (s) => s.user?.role === "engineer",
   },
   actions: {
     async load() {

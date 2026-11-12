@@ -736,3 +736,170 @@ class VueBrowserAcceptance(StaticLiveServerTestCase):
                 expect(row.locator(".status")).to_have_text("啟用")
             else:
                 expect(row).to_have_count(0)
+
+
+    def mock_screen_capture(self):
+        self.page.add_init_script("""
+          window.__makeCapture = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = window.__captureWidth || 1600;
+            canvas.height = window.__captureHeight || 900;
+            const ctx = canvas.getContext('2d');
+            const paint = () => {
+              for (const [x,y,color] of [[0,0,'#ff0000'],[1,0,'#00ff00'],[0,1,'#0000ff'],[1,1,'#ffff00']]) {
+                ctx.fillStyle = color;
+                ctx.fillRect(x*canvas.width/2,y*canvas.height/2,canvas.width/2,canvas.height/2);
+              }
+            };
+            paint();
+            const stream = canvas.captureStream(10);
+            window.__captureTrack = stream.getVideoTracks()[0];
+            const timer = setInterval(() => {
+              if (window.__captureTrack.readyState === 'ended') clearInterval(timer);
+              else paint();
+            }, 50);
+            return stream;
+          };
+          Object.defineProperty(navigator.mediaDevices, 'getDisplayMedia', {configurable:true, value: async () => {
+            if (window.__captureDenied) throw new DOMException('cancelled', 'NotAllowedError');
+            if (window.__capturePending) return new Promise(resolve => {window.__resolveCapture = () => resolve(window.__makeCapture());});
+            return window.__makeCapture();
+          }});
+        """)
+
+    def preview_image(self):
+        from PIL import Image
+        payload = self.page.locator('.attachment-previews img').last.evaluate("async img => Array.from(new Uint8Array(await (await fetch(img.src)).arrayBuffer()))")
+        return Image.open(io.BytesIO(bytes(payload))).convert('RGB')
+
+    def test_screenshot_crop_coordinates_across_scale_and_viewport(self):
+        self.mock_screen_capture()
+        self.login()
+        self.page.goto(self.live_server_url + '/tickets/new/')
+        cdp = self.context.new_cdp_session(self.page)
+        for dpr, width, height in ((1,1440,1000),(1.25,1152,800),(1.5,960,700),(2,1440,1000)):
+            cdp.send('Emulation.setDeviceMetricsOverride', {'width':width,'height':height,'deviceScaleFactor':dpr,'mobile':False})
+            self.page.get_by_role('button', name='擷取螢幕', exact=True).click()
+            dialog = self.page.get_by_role('dialog', name='截圖預覽與裁切')
+            expect(dialog).to_be_visible()
+            image = dialog.get_by_alt_text('待確認的截圖')
+            expect(image).to_be_visible()
+            self.page.wait_for_function("document.querySelector('.capture-stage img')?.naturalWidth === 1600")
+            self.assertEqual(self.page.evaluate('window.__captureTrack.readyState'), 'ended')
+            box = image.bounding_box()
+            self.page.mouse.move(box['x']+box['width']*.25, box['y']+box['height']*.25)
+            self.page.mouse.down()
+            self.page.mouse.move(box['x']+box['width']*.75, box['y']+box['height']*.75, steps=4)
+            self.page.mouse.up()
+            if dpr == 1:
+                self.page.screenshot(path=str(SHOTS / 'capture-preview.png'), full_page=True, animations='disabled')
+            if dpr == 2:
+                cdp.send('Emulation.setDeviceMetricsOverride', {'width':390,'height':844,'deviceScaleFactor':2,'mobile':False})
+                self.assertLessEqual(dialog.bounding_box()['width'], 390)
+            dialog.get_by_role('button', name='加入附件', exact=True).click()
+            expect(dialog).not_to_be_visible()
+            expect(self.page.locator('.attachment-previews img')).to_have_count(1)
+            captured = self.preview_image()
+            self.assertAlmostEqual(captured.width, 800, delta=2)
+            self.assertAlmostEqual(captured.height, 450, delta=2)
+            for x,y,color in ((10,10,(255,0,0)),(captured.width-10,10,(0,255,0)),(10,captured.height-10,(0,0,255)),(captured.width-10,captured.height-10,(255,255,0))):
+                for actual, expected in zip(captured.getpixel((x,y)), color):
+                    self.assertAlmostEqual(actual, expected, delta=3)
+            if dpr != 2:
+                self.page.get_by_role('button', name='移除附件', exact=True).click()
+        cdp.detach()
+        filename = self.page.locator('.attachment-previews span').last.inner_text()
+        self.page.get_by_label('問題摘要 *').fill('裁切截圖上傳')
+        self.page.get_by_label('問題描述 *').fill('驗證裁切後檔案可正常保存')
+        self.page.get_by_role('button', name='送出報修', exact=True).click()
+        attachment = self.page.get_by_role('link', name=filename, exact=False)
+        expect(attachment).to_be_visible()
+        response = self.page.request.get(self.live_server_url + attachment.get_attribute('href'))
+        from PIL import Image
+        self.assertEqual(Image.open(io.BytesIO(response.body())).size, captured.size)
+
+    def test_screenshot_cancel_full_frame_and_limit(self):
+        self.mock_screen_capture()
+        self.login()
+        self.page.goto(self.live_server_url + '/tickets/new/')
+        self.page.evaluate('window.__captureDenied = true')
+        button = self.page.get_by_role('button', name='擷取螢幕', exact=True)
+        button.click()
+        expect(self.page.get_by_text('未取得擷取授權', exact=False)).to_be_visible()
+        expect(button).to_be_enabled()
+        expect(self.page.locator('.attachment-previews img')).to_have_count(0)
+        self.page.evaluate('window.__captureDenied = false')
+        button.click()
+        dialog = self.page.get_by_role('dialog', name='截圖預覽與裁切')
+        expect(dialog).to_be_visible()
+        self.page.keyboard.press('Escape')
+        expect(dialog).not_to_be_visible()
+        expect(self.page.locator('.attachment-previews img')).to_have_count(0)
+        self.assertEqual(self.page.evaluate('window.__captureTrack.readyState'), 'ended')
+        button.click()
+        dialog.get_by_role('button', name='加入附件', exact=True).click()
+        expect(self.page.locator('.attachment-previews img')).to_have_count(1)
+        captured = self.preview_image()
+        self.assertEqual(captured.size, (1600,900))
+        self.page.once('dialog', lambda dialog: dialog.dismiss())
+        self.page.get_by_role('link', name='返回案件總覽', exact=True).click()
+        expect(self.page.get_by_role('heading', name='新增報修', exact=True)).to_be_visible()
+        from PIL import Image
+        payload = io.BytesIO()
+        Image.new('RGB',(20,20),'red').save(payload,format='PNG')
+        self.page.locator('input[type=file]').set_input_files([{'name':f'file{i}.png','mimeType':'image/png','buffer':payload.getvalue()} for i in range(4)])
+        expect(self.page.locator('.attachment-previews img')).to_have_count(5)
+        expect(button).to_be_disabled()
+        self.page.locator('input[type=file]').set_input_files({'name':'sixth.png','mimeType':'image/png','buffer':payload.getvalue()})
+        expect(self.page.get_by_text('每次最多5個附件', exact=True)).to_be_visible()
+        expect(self.page.locator('.attachment-previews img')).to_have_count(5)
+
+    def test_screenshot_pending_permission_cleanup_after_navigation(self):
+        self.mock_screen_capture()
+        self.login()
+        self.page.goto(self.live_server_url + '/tickets/new/')
+        self.page.evaluate('window.__capturePending = true')
+        self.page.get_by_role('button', name='擷取螢幕', exact=True).click()
+        self.page.wait_for_function('Boolean(window.__resolveCapture)')
+        self.page.get_by_role('link', name='案件總覽', exact=True).click()
+        expect(self.page.get_by_role('heading', name='案件總覽', exact=True)).to_be_visible()
+        self.page.evaluate('window.__resolveCapture()')
+        self.page.wait_for_function("window.__captureTrack.readyState === 'ended'")
+        expect(self.page.locator('dialog[open]')).to_have_count(0)
+
+    def test_screenshot_unsupported_has_clipboard_fallback(self):
+        self.page.add_init_script("Object.defineProperty(navigator.mediaDevices, 'getDisplayMedia', {value: undefined, configurable: true})")
+        self.login()
+        self.page.goto(self.live_server_url + '/tickets/new/')
+        expect(self.page.get_by_role('button', name='擷取螢幕', exact=True)).to_be_disabled()
+        expect(self.page.get_by_text('此環境無法直接擷取螢幕', exact=False)).to_be_visible()
+        self.page.get_by_text('跨螢幕截圖貼上', exact=True).click()
+        expect(self.page.get_by_text('按 Win＋Shift＋S', exact=False)).to_be_visible()
+
+    def test_dual_screen_clipboard_keeps_pixels_and_uploads(self):
+        import base64
+        from PIL import Image
+        data = io.BytesIO()
+        image = Image.new('RGB',(3840,1080),'#123456')
+        image.paste('#abcdef',(1920,0,3840,1080))
+        image.save(data,format='PNG')
+        self.login()
+        self.page.goto(self.live_server_url + '/tickets/new/')
+        self.page.locator('.ticket-create-grid').evaluate("""(form, base64) => {
+          const bytes = Uint8Array.from(atob(base64), x => x.charCodeAt(0));
+          const transfer = new DataTransfer();
+          transfer.items.add(new File([bytes], 'dual-screen.png', {type:'image/png'}));
+          form.dispatchEvent(new ClipboardEvent('paste', {clipboardData:transfer,bubbles:true,cancelable:true}));
+        }""", base64.b64encode(data.getvalue()).decode())
+        expect(self.page.locator('.attachment-previews img')).to_have_count(1)
+        captured = self.preview_image()
+        self.assertEqual(captured.size, (3840,1080))
+        self.assertEqual(captured.getpixel((100,100)), (18,52,86))
+        self.assertEqual(captured.getpixel((3000,100)), (171,205,239))
+        self.page.get_by_label('問題摘要 *').fill('雙螢幕貼上')
+        self.page.get_by_label('問題描述 *').fill('保留原始圖片尺寸')
+        self.page.get_by_role('button', name='送出報修', exact=True).click()
+        link = self.page.get_by_role('link', name='dual-screen.png', exact=False)
+        expect(link).to_be_visible()
+        response = self.page.request.get(self.live_server_url + link.get_attribute('href'))
+        self.assertEqual(response.body(), data.getvalue())

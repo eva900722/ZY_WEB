@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onBeforeUnmount, watch } from "vue";
 import { Paperclip, X, ImagePlus } from "@lucide/vue";
+import ScreenCapture from "./ScreenCapture.vue";
 const model = defineModel<File[]>({ default: () => [] });
 const error = ref("");
 const previews = ref<{ file: File; url: string }[]>([]);
@@ -51,6 +52,13 @@ defineExpose({ paste });
 </script>
 <template>
   <div>
+    <div class="capture-tools">
+      <ScreenCapture :disabled="model.length >= 5" @capture="add([$event])" />
+      <details class="capture-help">
+        <summary>跨螢幕截圖貼上</summary>
+        <p>按 Win＋Shift＋S，框選需要的範圍（可跨螢幕）。回到表單後按 Ctrl＋V 貼上；也可將系統截圖存檔後加入。</p>
+      </details>
+    </div>
     <label
       class="upload-zone"
       @dragover.prevent
@@ -84,3 +92,10 @@ defineExpose({ paste });
     </div>
   </div>
 </template>
+
+<style scoped>
+.capture-tools { margin-bottom: 14px; }
+.capture-help { margin-top: 10px; color: var(--primary); font-size: 13px; }
+.capture-help summary { cursor: pointer; width: fit-content; }
+.capture-help p { margin: 8px 0; color: var(--muted); line-height: 1.8; }
+</style>

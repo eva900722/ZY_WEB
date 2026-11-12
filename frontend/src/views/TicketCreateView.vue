@@ -281,7 +281,7 @@ onBeforeUnmount(() => {
         <div class="form-section border-top">
           <h3>圖片與附件</h3>
           <p class="muted">錯誤畫面或照片，有助於負責人判斷問題。</p>
-          <AttachmentPicker ref="picker" v-model="files" />
+          <AttachmentPicker ref="picker" v-model="files" @update:model-value="ui.dirty = true" />
         </div>
         <div class="panel-footer">
           <span class="muted">送出後可在案件頁補充說明</span

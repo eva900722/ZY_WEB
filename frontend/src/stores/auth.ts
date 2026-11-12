@@ -14,7 +14,10 @@ export type User = {
   office: string;
 };
 export const useAuth = defineStore("auth", {
-  state: () => ({ user: null as User | null, ready: false }),
+  state: () => ({
+    user: null as User | null, ready: false,
+    platform: { platform_name: "贊耀服務平台", company_name: "贊耀電腦", contact_phone: "", contact_email: "" },
+  }),
   getters: {
     isAdmin: (s) => s.user?.role === "it_admin",
     isManager: (s) =>
@@ -24,6 +27,8 @@ export const useAuth = defineStore("auth", {
     async load() {
       const d = await api("auth/session/");
       this.user = d.user;
+      if (d.platform) this.platform = d.platform;
+      document.title = this.platform.platform_name + "｜企業報修服務";
       this.ready = true;
     },
     async login(username: string, password: string) {

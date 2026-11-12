@@ -179,7 +179,7 @@ onBeforeUnmount(() => {
       <RouterLink to="/" class="brand"
         ><span class="brand-mark">Z</span>
         <div>
-          贊耀服務平台<small>贊耀電腦｜銷售・維修・資訊服務</small>
+          {{ auth.platform.platform_name }}<small>{{ auth.platform.company_name }}｜銷售・維修・資訊服務</small>
         </div></RouterLink
       >
       <div class="module-navigation">
@@ -242,7 +242,7 @@ onBeforeUnmount(() => {
           <Menu :size="22" />
         </button>
         <div class="breadcrumb">
-          <span>{{ activeModule?.label || "贊耀服務平台" }}</span
+          <span>{{ activeModule?.label || auth.platform.platform_name }}</span
           ><ChevronRight :size="14" /><strong>{{
             route.path === "/settings/profile/"
               ? "個人設定"
@@ -276,7 +276,11 @@ onBeforeUnmount(() => {
         </div>
       </header>
       <main class="main-content"><RouterView /></main>
-      <footer class="app-footer">贊耀服務平台 · 讓每一個問題都有進度。</footer>
+      <footer class="app-footer">
+        {{ auth.platform.platform_name }} · 讓每一個問題都有進度。
+        <span v-if="auth.platform.contact_phone"> · {{ auth.platform.contact_phone }}</span>
+        <span v-if="auth.platform.contact_email"> · {{ auth.platform.contact_email }}</span>
+      </footer>
     </div>
   </div>
   <div v-else class="boot-screen">

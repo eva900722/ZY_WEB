@@ -120,9 +120,9 @@ onMounted(() => load());
     :subtitle="
       auth.isAdmin
         ? '管理系統成員、角色與帳號使用狀態。'
-        : '維護本公司報修者的基本聯絡資料。'
+        : '管理本公司報修者的帳號、聯絡資料與使用狀態。'
     "
-    ><button v-if="auth.isAdmin" class="btn primary" @click="edit()">
+    ><button v-if="auth.isManager" class="btn primary" @click="edit()">
       <Plus :size="17" />新增帳號
     </button></PageHeading
   ><FieldErrors v-if="!modal" :message="error" />
@@ -163,7 +163,7 @@ onMounted(() => load());
                 <button class="btn ghost small" @click="edit(u)">
                   修改資料
                 </button>
-                <details v-if="auth.isAdmin" class="action-menu">
+                <details v-if="auth.isManager" class="action-menu">
                   <summary class="icon-button" aria-label="帳號操作">
                     <MoreHorizontal :size="19" />
                   </summary>
@@ -206,13 +206,14 @@ onMounted(() => load());
         </button>
       </div>
       <FieldErrors :message="error" />
+      <p v-if="!auth.isAdmin" class="muted">所屬公司：{{ auth.user?.company_name }} · 角色：公司報修者</p>
       <form
         @submit.prevent="save"
         @input="ui.dirty = true"
         @change="ui.dirty = true"
       >
         <div class="form-grid">
-          <label v-if="auth.isAdmin"
+          <label
             >登入帳號 *<input
               v-model="form.username"
               name="username"
@@ -252,7 +253,7 @@ onMounted(() => load());
             >Email<input
               v-model="form.email"
               type="email"
-              placeholder="選填，用於進度通知及密碼復原"
+              placeholder="選填，用於維修進度通知"
           /></label>
         </div>
         <div class="dialog-footer">

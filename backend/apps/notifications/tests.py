@@ -63,7 +63,6 @@ class EmailEventPolicyTests(TestCase):
         ticket = update_status(self.engineer, ticket.pk, ticket.revision, "completed", "完成")
         self.assertTrue(Delivery.objects.exists())
         Delivery.objects.all().delete()
-        ticket = update_status(self.engineer, ticket.pk, ticket.revision, "closed", "結案")
         ticket = update_status(self.engineer, ticket.pk, ticket.revision, "processing", "再次處理")
         self.assertEqual(Delivery.objects.count(), 0)
 

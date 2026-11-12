@@ -6,8 +6,8 @@ import {
   Users,
   SlidersHorizontal,
   Bell,
-  ScrollText,
   Wrench,
+  Settings,
 } from "@lucide/vue";
 export type NavigationItem = {
   path: string;
@@ -35,7 +35,7 @@ const definitions: NavigationModule[] = [
       "/users/",
       "/companies/",
       "/versions/",
-      "/audit/",
+      "/settings/system/",
     ],
     items: [
       { path: "/", label: "案件總覽", icon: LayoutDashboard },
@@ -60,9 +60,9 @@ const definitions: NavigationModule[] = [
         roles: ["it_admin"],
       },
       {
-        path: "/audit/",
-        label: "操作紀錄",
-        icon: ScrollText,
+        path: "/settings/system/",
+        label: "系統設定",
+        icon: Settings,
         roles: ["it_admin"],
       },
     ],

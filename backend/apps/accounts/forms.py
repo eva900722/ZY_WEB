@@ -56,8 +56,10 @@ class UserForm(forms.ModelForm):
         if self.instance.pk:
             self.fields["username"].disabled = True
         if actor.role == User.Role.COMPANY_ADMIN:
-            for k in ["username", "role", "company"]:
+            for k in ["role", "company"]:
                 self.fields.pop(k)
+            self.instance.role = User.Role.REPORTER
+            self.instance.company = actor.company
 
     def clean_username(self):
         name = self.cleaned_data["username"].lower()

@@ -334,16 +334,16 @@ class ApiMigrationTests(TestCase):
         self.assertEqual(self.post(f"tickets/{self.ticket.pk}/", data).status_code, 409)
         self.assertEqual(self.ticket.entries.count(), 1)
 
-    def test_company_manager_cannot_create_or_reset_user(self):
+    def test_company_manager_can_create_and_reset_reporter(self):
         self.as_user(self.manager)
         self.assertEqual(
-            self.post("users/", {"username": "unauthorized"}).status_code, 403
+            self.post("users/", {"username": "companyworker", "display_name": "本公司員工"}).status_code, 201
         )
         self.assertEqual(
             self.post(
                 f"users/{self.reporter.pk}/action/", {"action": "temporary"}
             ).status_code,
-            403,
+            200,
         )
 
     def test_admin_create_user_returns_temporary_once_no_cache(self):

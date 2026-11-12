@@ -2,6 +2,7 @@ from django.utils import timezone
 from django.db import transaction
 from django.core.mail import send_mail
 from .models import Notification, Delivery
+from .configuration import mail_connection
 from apps.accounts.models import User
 
 
@@ -62,9 +63,13 @@ def deliver_batch(limit=50):
                 break
             item.attempts += 1
             try:
-                send_mail(
-                    item.subject, item.body, None, [item.recipient], fail_silently=False
+                connection, sender = mail_connection()
+                sent = send_mail(
+                    item.subject, item.body, sender, [item.recipient],
+                    connection=connection, fail_silently=False,
                 )
+                if sent != 1:
+                    raise RuntimeError("MailNotSent")
                 item.status = "sent"
                 item.sent_at = timezone.now()
                 item.last_error = ""

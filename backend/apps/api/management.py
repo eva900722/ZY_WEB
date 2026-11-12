@@ -110,13 +110,11 @@ def users(request, pk=None):
                 else [],
             }
         )
-    if not obj:
-        require(request.user, "it_admin")
     form = UserForm(request.data, instance=obj, actor=request.user)
     valid(form)
     with transaction.atomic():
         list(User.objects.select_for_update().filter(role="it_admin").order_by("pk"))
-        existing = User.objects.select_for_update().get(pk=obj.pk) if obj else None
+        existing = get_object_or_404(managed_users(request.user).select_for_update(), pk=obj.pk) if obj else None
         if (
             existing
             and existing.role == "it_admin"
@@ -146,12 +144,12 @@ def users(request, pk=None):
 
 @api_view(["POST"])
 def user_action(request, pk):
-    require(request.user, "it_admin")
+    require(request.user, "it_admin", "company_admin")
     action = request.data.get("action")
     with transaction.atomic():
         list(User.objects.select_for_update().filter(role="it_admin").order_by("pk"))
         user = get_object_or_404(
-            User.objects.select_for_update(), pk=pk, deleted_at__isnull=True
+            managed_users(request.user).select_for_update(), pk=pk
         )
         if action == "temporary":
             if not user.is_active:
@@ -177,7 +175,7 @@ def user_action(request, pk):
         if (
             action in ["disable", "delete"]
             and user.assigned_tickets.exclude(
-                status__in=["closed", "cancelled"]
+                status__in=["completed", "cancelled"]
             ).exists()
         ):
             raise ValidationError({"message": "此帳號仍有未結案件，請先交接"})

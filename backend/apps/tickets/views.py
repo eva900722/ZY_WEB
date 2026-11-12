@@ -1,7 +1,7 @@
 import json
 from django import forms
 from django.db import transaction
-from django.db.models import Q, Count
+from django.db.models import Q
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
@@ -20,6 +20,7 @@ from common.permissions import (
     require,
 )
 from .models import Ticket
+from .statuses import status_label, status_choices, status_counts, filter_statuses, allowed_transitions
 from .forms import TicketForm, EntryForm, AssignmentForm, StatusForm
 from .services import create_ticket, assign, claim, update_status, add_entry
 
@@ -28,8 +29,8 @@ def filtered(user, params):
     q = tickets_for(user)
     if params.get("q"):
         q = q.filter(Q(number__icontains=params["q"]) | Q(title__icontains=params["q"]))
-    if params.get("status") in Ticket.Status.values:
-        q = q.filter(status=params["status"])
+    if params.get("status"):
+        q = q.filter(status__in=filter_statuses(user, params["status"]))
     if params.get("company", "").isdigit():
         q = q.filter(company_id=params["company"])
     for param, lookup in [
@@ -51,20 +52,17 @@ def dashboard(request):
 
     q = filtered(request.user, request.GET)
     rows = Paginator(q, 25).get_page(request.GET.get("page"))
-    counts = {s: 0 for s in Ticket.Status.values}
-    counts.update(
-        {
-            x["status"]: x["n"]
-            for x in tickets_for(request.user).values("status").annotate(n=Count("id"))
-        }
-    )
+    counts = status_counts(request.user, tickets_for(request.user))
+    for ticket in rows:
+        ticket.display_status = status_label(request.user, ticket.status)
     return render(
         request,
         "tickets/list.html",
         {
             "rows": rows,
             "title": "案件工作台",
-            "statuses": Ticket.Status.choices,
+            "statuses": status_choices(request.user),
+            "stat_cards": [(label, counts[value]) for value, label in status_choices(request.user)],
             "counts": counts,
             "companies": Company.objects.all()
             if request.user.role == "it_admin"
@@ -228,18 +226,7 @@ def detail(request, pk):
         ef.fields.pop("internal")
     af = AssignmentForm(initial={"revision": ticket.revision})
     sf = StatusForm(initial={"revision": ticket.revision})
-    transitions = {
-        "unassigned": ["cancelled"],
-        "assigned": ["processing", "cancelled"],
-        "processing": ["waiting", "completed", "cancelled"],
-        "waiting": ["processing", "completed", "cancelled"],
-        "completed": ["closed", "processing"],
-        "closed": ["processing"],
-        "cancelled": ["processing"],
-    }
-    statuses = transitions.get(ticket.status, [])
-    if request.user.role in ["reporter", "company_admin"]:
-        statuses = ["closed"] if ticket.status == "completed" else []
+    statuses = allowed_transitions(request.user, ticket)
     sf.fields["status"].choices = [(s, Ticket.Status(s).label) for s in statuses]
     if request.method == "POST":
         action = request.POST.get("action")
@@ -316,6 +303,7 @@ def detail(request, pk):
         "tickets/detail.html",
         {
             "ticket": ticket,
+            "display_status": status_label(request.user, ticket.status),
             "entries": entries_for(request.user, ticket),
             "attachments": attachments_for(request.user, ticket),
             "entry_form": ef,

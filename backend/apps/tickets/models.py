@@ -15,12 +15,10 @@ class DailyTicketCounter(models.Model):
 
 class Ticket(models.Model):
     class Status(models.TextChoices):
-        UNASSIGNED = "unassigned", "待接手"
         ASSIGNED = "assigned", "待處理"
         PROCESSING = "processing", "處理中"
         WAITING = "waiting", "待客戶回覆"
         COMPLETED = "completed", "已完成"
-        CLOSED = "closed", "已結案"
         CANCELLED = "cancelled", "已取消"
 
     public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
@@ -48,7 +46,7 @@ class Ticket(models.Model):
     snapshot = models.JSONField(default=dict)
     answers = models.JSONField(default=dict)
     status = models.CharField(
-        max_length=20, choices=Status.choices, default=Status.UNASSIGNED
+        max_length=20, choices=Status.choices, default=Status.ASSIGNED
     )
     revision = models.PositiveIntegerField(default=1)
     created_at = models.DateTimeField(auto_now_add=True)

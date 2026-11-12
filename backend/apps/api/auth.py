@@ -14,6 +14,7 @@ from apps.accounts.forms import LoginForm, PasswordForm, ProfileForm
 from apps.accounts.services import EMAIL_RECOVERY_DISABLED
 from apps.audit.services import log
 from .helpers import valid, user_data
+from apps.notifications.configuration import public_settings
 
 
 @ensure_csrf_cookie
@@ -21,7 +22,7 @@ from .helpers import valid, user_data
 @permission_classes([AllowAny])
 def session(request):
     return Response(
-        {"user": user_data(request.user), "csrf_token": get_token(request._request)}
+        {"user": user_data(request.user), "csrf_token": get_token(request._request), "platform": public_settings()}
     )
 
 

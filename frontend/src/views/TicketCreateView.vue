@@ -145,11 +145,13 @@ onBeforeUnmount(() => {
 });
 </script>
 <template>
-  <PageHeading title="新增報修" subtitle="描述遇到的問題，讓我們更快協助您。"
-    ><RouterLink to="/" class="btn ghost"
-      ><ArrowLeft :size="16" />返回案件</RouterLink
-    ></PageHeading
-  ><FieldErrors :message="error" />
+  <div class="back-link">
+    <RouterLink to="/" class="return-cases"
+      ><ArrowLeft :size="16" />返回案件總覽</RouterLink
+    >
+  </div>
+  <PageHeading title="新增報修" subtitle="描述遇到的問題，讓我們更快協助您。" />
+  <FieldErrors :message="error" />
   <div v-if="loading" class="loading-state">載入報修表單…</div>
   <template v-else
     ><section v-if="auth.isAdmin" class="panel compact">
@@ -321,3 +323,28 @@ onBeforeUnmount(() => {
     </section></template
   >
 </template>
+
+<style scoped>
+.back-link .return-cases {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 0;
+  border: 0;
+  background: transparent;
+  color: #1d4ed8;
+  font-size: 14px;
+  font-weight: 650;
+  transition: color 150ms ease;
+}
+.back-link .return-cases:hover {
+  color: #1e40af;
+  text-decoration: underline;
+}
+@media (prefers-reduced-motion: reduce) {
+  .back-link .return-cases {
+    transition: none;
+  }
+}
+</style>

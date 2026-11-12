@@ -2,6 +2,7 @@
 
 import io, os, tempfile
 from pathlib import Path
+from urllib.parse import urlsplit
 from concurrent.futures import ThreadPoolExecutor
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
 from django.test import override_settings
@@ -9,6 +10,7 @@ from django.utils import timezone
 from django.db import connections
 from playwright.sync_api import sync_playwright, expect
 from apps.accounts.models import User
+from apps.audit.models import AuditLog
 from apps.accounts.services import temporary_password
 from apps.companies.models import Company
 from apps.forms.models import FormVersion
@@ -157,6 +159,25 @@ class VueBrowserAcceptance(StaticLiveServerTestCase):
     def test_reporter_create_attachment_and_download(self):
         self.login()
         self.page.goto(self.live_server_url + "/tickets/new/")
+        back = self.page.get_by_role("link", name="返回案件總覽", exact=True)
+        for width, height in ((1440, 900), (390, 844)):
+            self.page.set_viewport_size({"width": width, "height": height})
+            expect(back).to_have_attribute("href", "/")
+            expect(back).to_have_css("background-color", "rgba(0, 0, 0, 0)")
+            expect(back).to_have_css("border-top-style", "none")
+            expect(back).to_have_css("font-size", "14px")
+            expect(back).to_have_css("font-weight", "650")
+            title = self.page.get_by_role("heading", name="新增報修", exact=True)
+            self.assertLessEqual(back.bounding_box()["y"] + back.bounding_box()["height"], title.bounding_box()["y"])
+            self.assertGreaterEqual(back.bounding_box()["height"], 44)
+            self.assertTrue(self.page.evaluate("document.documentElement.scrollWidth <= window.innerWidth"))
+        self.page.set_viewport_size({"width": 1440, "height": 900})
+        back.hover()
+        expect(back).to_have_css("text-decoration-line", "underline")
+        self.page.screenshot(path=str(SHOTS / "create-return-link.png"), full_page=True, animations="disabled")
+        back.click()
+        expect(self.page.get_by_role("heading", name="案件總覽", exact=True)).to_be_visible()
+        self.page.goto(self.live_server_url + "/tickets/new/")
         self.page.get_by_label("問題摘要 *").fill("Vue實際送出案件")
         self.page.get_by_label("問題描述 *").fill("驗證新介面報修與圖片附件。")
         from PIL import Image
@@ -265,17 +286,26 @@ class VueBrowserAcceptance(StaticLiveServerTestCase):
         self.page.screenshot(
             path=str(SHOTS / "form-designer.png"), full_page=True, animations="disabled"
         )
-        self.page.goto(self.live_server_url + "/audit/")
-        expect(self.page.get_by_role("heading", name="操作紀錄")).to_be_visible()
+        expect(self.page.locator('#module-repairs a[href="/audit/"]')).to_have_count(0)
+        audit_requests = []
+        self.page.on("request", lambda request: audit_requests.append(request.url)
+                     if "/api/audit/" in request.url else None)
+        for path in ("/audit/", "/audit/?actor=admin", "/audit/old/"):
+            self.page.goto(self.live_server_url + path)
+            expect(self.page.get_by_role("heading", name="案件總覽", exact=True)).to_be_visible()
+            self.assertEqual(urlsplit(self.page.url).path, "/")
+            expect(self.page.get_by_role("heading", name="操作紀錄", exact=True)).to_have_count(0)
+        self.assertEqual(audit_requests, [])
+        self.assertTrue(self.db(lambda: AuditLog.objects.filter(actor_id=self.admin.pk).exists()))
+        self.page.goto(self.live_server_url + "/notifications/")
+        expect(self.page.get_by_role("heading", name="通知中心", exact=True)).to_be_visible()
         self.page.get_by_role("button", name="登出系統", exact=True).click()
         self.login("manager")
         self.assertEqual(
             self.page.get_by_role("link", name="公司管理", exact=True).count(), 0
         )
         self.page.goto(self.live_server_url + "/users/")
-        self.assertEqual(
-            self.page.get_by_role("button", name="新增帳號", exact=True).count(), 0
-        )
+        expect(self.page.get_by_role("button", name="新增帳號", exact=True)).to_be_visible()
 
     def test_pwa_manifest_cache_and_offline(self):
         self.login()
@@ -430,7 +460,7 @@ class VueBrowserAcceptance(StaticLiveServerTestCase):
         self.page.goto(self.live_server_url + "/accounts/login/")
         self.page.get_by_role("link", name="忘記密碼？", exact=True).click()
         expect(self.page.get_by_role("heading", name="忘記密碼", exact=True)).to_be_visible()
-        expect(self.page.get_by_text("請聯絡贊耀公司人員確認身分並重設臨時密碼。使用臨時密碼登入後，必須先設定自己的密碼才能繼續使用。", exact=True)).to_be_visible()
+        expect(self.page.get_by_text("報修者請聯絡本公司管理者或贊耀公司人員重設臨時密碼；公司管理者請聯絡贊耀公司人員。使用臨時密碼登入後，必須先設定自己的密碼才能繼續使用。", exact=True)).to_be_visible()
         expect(self.page.locator("form")).to_have_count(0)
         self.page.goto(self.live_server_url + "/accounts/token/old-link/")
         expect(self.page.get_by_role("heading", name="連結已停用", exact=True)).to_be_visible()
@@ -578,3 +608,131 @@ class VueBrowserAcceptance(StaticLiveServerTestCase):
         self.assertTrue(self.page.evaluate("document.documentElement.scrollWidth <= window.innerWidth"))
         back.click()
         expect(self.page.get_by_role("heading", name="案件總覽", exact=True)).to_be_visible()
+
+
+    def test_system_settings_permissions_hinet_and_masked_password(self):
+        from cryptography.fernet import Fernet
+        from apps.notifications.models import SystemSettings, Delivery
+        with override_settings(SETTINGS_ENCRYPTION_KEY=Fernet.generate_key().decode(), EMAIL_HOST_PASSWORD="", EMAIL_HOST_USER="", DEFAULT_FROM_EMAIL="test@example.com"):
+            self.login("admin")
+            nav = self.page.get_by_role("navigation", name="報修系統入口", exact=True)
+            settings_link = nav.get_by_role("link", name="系統設定", exact=True)
+            expect(settings_link).to_be_visible()
+            toggle = self.page.get_by_role("button", name="報修系統入口", exact=True)
+            toggle.click()
+            expect(settings_link).not_to_be_visible()
+            toggle.click()
+            settings_link.click()
+            expect(settings_link).to_have_attribute("aria-current", "page")
+            expect(self.page.locator(".breadcrumb")).to_contain_text("報修系統入口")
+            expect(self.page.locator(".breadcrumb strong")).to_have_text("系統設定")
+            self.page.get_by_label("平台名稱", exact=True).fill("驗收服務平台")
+            self.page.get_by_role("button", name="儲存基本資料", exact=True).click()
+            expect(self.page.locator(".brand")).to_contain_text("驗收服務平台")
+            self.page.get_by_role("button", name="套用 HiNet", exact=True).click()
+            expect(self.page.get_by_label("SMTP 主機", exact=True)).to_have_value("msr.hinet.net")
+            expect(self.page.get_by_label("連接埠", exact=True)).to_have_value("587")
+            expect(self.page.get_by_label("加密方式", exact=True)).to_have_value("starttls")
+            self.page.get_by_label("寄件信箱", exact=True).fill("smtp@example.com")
+            self.page.get_by_label("SMTP 帳號", exact=True).fill("smtp@example.com")
+            self.page.get_by_label("新的 SMTP 密碼", exact=True).fill("Browser-test-only-secret!")
+            self.page.get_by_role("button", name="儲存寄信設定", exact=True).click()
+            expect(self.page.get_by_role("button", name="更換密碼", exact=True)).to_be_visible()
+            expect(self.page.locator('input[type="password"]')).to_have_count(0)
+            self.page.reload()
+            expect(self.page.get_by_role("button", name="更換密碼", exact=True)).to_be_visible()
+            self.page.get_by_label("測試收件信箱", exact=True).fill("test@example.com")
+            self.page.get_by_role("button", name="寄送測試信", exact=True).click()
+            expect(self.page.get_by_text("排隊或重試中", exact=False)).to_be_visible()
+            self.assertTrue(self.db(lambda: Delivery.objects.filter(is_test=True, recipient="test@example.com").exists()))
+            self.page.set_viewport_size({"width": 390, "height": 844})
+            self.assertTrue(self.page.evaluate("document.documentElement.scrollWidth <= window.innerWidth"))
+            self.page.screenshot(path=str(SHOTS / "system-settings-mobile.png"), full_page=True, animations="disabled")
+            self.page.set_viewport_size({"width": 1440, "height": 900})
+            self.page.get_by_role("button", name="登出系統", exact=True).click()
+            self.login("reporter")
+            expect(self.page.get_by_role("link", name="系統設定", exact=True)).to_have_count(0)
+            self.page.goto(self.live_server_url + "/settings/system/")
+            expect(self.page.get_by_role("heading", name="案件總覽", exact=True)).to_be_visible()
+            self.assertEqual(self.db(lambda: SystemSettings.objects.get().platform_name), "驗收服務平台")
+
+
+    def test_status_cards_choices_and_customer_waiting_presentation(self):
+        from apps.tickets.models import Ticket
+        def prepare():
+            for status in ("processing", "waiting", "completed", "cancelled"):
+                Ticket.objects.create(number="BROWSER-" + status, company=self.company,
+                    reporter=self.reporter, created_by=self.reporter, form_version=self.version,
+                    title="status case", description="fixture", status=status, engineer=self.admin)
+        self.db(prepare)
+        self.login("admin")
+        expect(self.page.locator(".stat-card > div > span")).to_have_text(["處理中", "待客戶回覆", "已完成", "已取消"])
+        expect(self.page.locator('select[aria-label="案件狀態"] option')).to_have_text(["全部狀態", "處理中", "待客戶回覆", "已完成", "已取消"])
+        expect(self.page.locator(".stat-card strong")).to_have_text(["2", "1", "1", "1"])
+        self.page.screenshot(path=str(SHOTS / "staff-status-cards.png"), full_page=True, animations="disabled")
+        self.page.get_by_role("button", name="登出系統", exact=True).click()
+        for username in ("reporter", "manager"):
+            self.login(username)
+            expect(self.page.locator(".stat-card > div > span")).to_have_text(["處理中", "已完成", "已取消"])
+            expect(self.page.locator(".stat-card strong")).to_have_text(["3", "1", "1"])
+            expect(self.page.locator('select[aria-label="案件狀態"] option')).to_have_text(["全部狀態", "處理中", "已完成", "已取消"])
+            widths = self.page.locator(".stat-card").evaluate_all("cards => cards.map(card => card.getBoundingClientRect().width)")
+            self.assertAlmostEqual(widths[0], widths[1], delta=1)
+            self.assertAlmostEqual(widths[0], widths[2], delta=1)
+            self.page.get_by_label("案件狀態", exact=True).select_option("processing")
+            self.page.get_by_role("button", name="查詢", exact=True).click()
+            expect(self.page.locator(".case-table tbody tr")).to_have_count(3)
+            expect(self.page.locator(".case-table .status")).to_have_text(["處理中"] * 3)
+            self.page.get_by_role("link", name="BROWSER-waiting", exact=True).click()
+            expect(self.page.locator(".heading-actions .status")).to_have_text("處理中")
+            self.page.get_by_role("link", name="返回案件總覽", exact=True).click()
+            self.page.screenshot(path=str(SHOTS / "customer-status-cards.png"), full_page=True, animations="disabled")
+            self.page.set_viewport_size({"width": 390, "height": 844})
+            expect(self.page.locator(".stat-card")).to_have_count(3)
+            self.assertTrue(self.page.evaluate("document.documentElement.scrollWidth <= window.innerWidth"))
+            self.page.set_viewport_size({"width": 1440, "height": 900})
+            self.page.get_by_role("button", name="登出系統", exact=True).click()
+
+
+    def test_company_manager_account_lifecycle_and_employee_first_login(self):
+        self.login("manager")
+        self.page.goto(self.live_server_url + "/users/")
+        self.page.get_by_role("button", name="新增帳號", exact=True).click()
+        expect(self.page.locator('select[name="role"]')).to_have_count(0)
+        expect(self.page.locator('select[name="company"]')).to_have_count(0)
+        self.page.locator('[name="username"]').fill("manager.worker")
+        self.page.locator('[name="display_name"]').fill("公司員工")
+        self.page.get_by_role("button", name="儲存帳號", exact=True).click()
+        expect(self.page.get_by_role("heading", name="帳號已準備完成", exact=True)).to_be_visible()
+        raw = self.page.locator(".credential.secret").inner_text()
+        self.page.get_by_role("button", name="已記錄，完成", exact=True).click()
+        row = self.page.locator("tbody tr").filter(has_text="manager.worker")
+        expect(row).to_contain_text("公司報修者")
+        self.page.get_by_role("button", name="登出系統", exact=True).click()
+        self.login("manager.worker", raw)
+        expect(self.page.get_by_role("heading", name="設定個人密碼", exact=True)).to_be_visible()
+        self.page.locator('[name="password"]').fill(raw)
+        self.page.locator('[name="new_password1"]').fill(PASSWORD)
+        self.page.locator('[name="new_password2"]').fill(PASSWORD)
+        self.page.get_by_role("button", name="設定密碼並繼續", exact=True).click()
+        expect(self.page.get_by_role("heading", name="案件總覽", exact=True)).to_be_visible()
+        self.page.get_by_role("button", name="登出系統", exact=True).click()
+        self.login("manager")
+        self.page.goto(self.live_server_url + "/users/")
+        row.get_by_role("button", name="修改資料", exact=True).click()
+        expect(self.page.locator('[name="username"]')).to_be_disabled()
+        self.page.get_by_role("button", name="關閉", exact=True).click()
+        self.page.on("dialog", lambda dialog: dialog.accept())
+        for label in ("重設臨時密碼", "停用帳號", "啟用帳號", "刪除帳號"):
+            if not row.get_by_role("button", name=label, exact=True).is_visible():
+                row.locator("summary").click()
+            row.get_by_role("button", name=label, exact=True).click()
+            if label == "重設臨時密碼":
+                expect(self.page.get_by_role("heading", name="帳號已準備完成", exact=True)).to_be_visible()
+                self.page.get_by_role("button", name="已記錄，完成", exact=True).click()
+            elif label == "停用帳號":
+                expect(row.locator(".status")).to_have_text("停用")
+            elif label == "啟用帳號":
+                expect(row.locator(".status")).to_have_text("啟用")
+            else:
+                expect(row).to_have_count(0)

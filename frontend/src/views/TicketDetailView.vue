@@ -254,7 +254,7 @@ watch(() => route.params.id, load);
             {{
               ticket.can_claim
                 ? "請先領取案件，再補充處理紀錄。"
-                : "案件已結案或取消，需由贊耀公司人員重新開啟後才能補充。"
+                : "案件已取消，需由贊耀公司人員重新開啟後才能補充。"
             }}
           </p>
         </section>
@@ -294,7 +294,7 @@ watch(() => route.params.id, load);
           v-if="
             auth.isAdmin &&
             !ticket.can_claim &&
-            !['closed', 'cancelled'].includes(ticket.status)
+            ticket.status !== 'cancelled'
           "
           class="panel"
         >

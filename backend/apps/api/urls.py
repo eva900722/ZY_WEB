@@ -1,7 +1,10 @@
 from django.urls import path
-from . import auth, tickets, management as m
+from . import auth, tickets, management as m, system_settings as system
 
 urlpatterns = [
+    path("system-settings/", system.configuration),
+    path("system-settings/test-mail/", system.test_mail),
+    path("system-settings/test-mail/<int:pk>/", system.test_mail),
     path("auth/session/", auth.session),
     path("auth/profile/", auth.profile),
     path("auth/login/", auth.sign_in),

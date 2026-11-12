@@ -156,3 +156,7 @@ REST_FRAMEWORK = {
     "EXCEPTION_HANDLER": "apps.api.helpers.exception_handler",
 }
 CSRF_FAILURE_VIEW = "apps.api.helpers.csrf_failure"
+
+# Separate from the database backup and Django signing key.
+SETTINGS_ENCRYPTION_KEY = os.getenv("SETTINGS_ENCRYPTION_KEY", "")
+EMAIL_USE_SSL = flag("EMAIL_USE_SSL")

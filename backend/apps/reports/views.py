@@ -17,6 +17,7 @@ from pathlib import Path
 import os
 from common.permissions import entries_for, attachments_for
 from apps.tickets.views import filtered
+from apps.tickets.statuses import status_label
 from apps.audit.services import log
 
 
@@ -25,7 +26,7 @@ def text_rows(user, ticket):
         ("單號", ticket.number),
         ("公司", ticket.company.name),
         ("報修人", ticket.snapshot.get("display_name", "")),
-        ("狀態", ticket.get_status_display()),
+        ("狀態", status_label(user, ticket.status)),
         ("負責人", str(ticket.engineer) if ticket.engineer_id else "尚未接手"),
         ("問題摘要", ticket.title),
         ("問題描述", ticket.description),

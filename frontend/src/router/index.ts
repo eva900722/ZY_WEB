@@ -30,6 +30,11 @@ const router = createRouter({
       path: "/settings/profile/",
       component: () => import("../views/ProfileView.vue"),
     },
+    {
+      path: "/settings/system/",
+      component: () => import("../views/SystemSettingsView.vue"),
+      meta: { roles: ["it_admin"] },
+    },
     { path: "/", component: () => import("../views/DashboardView.vue") },
     {
       path: "/tickets/new/",
@@ -58,11 +63,6 @@ const router = createRouter({
     {
       path: "/notifications/",
       component: () => import("../views/ActivityView.vue"),
-    },
-    {
-      path: "/audit/",
-      component: () => import("../views/ActivityView.vue"),
-      meta: { roles: ["it_admin"] },
     },
     { path: "/:pathMatch(.*)*", redirect: "/" },
   ],

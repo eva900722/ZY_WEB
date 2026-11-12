@@ -36,7 +36,7 @@ const mode = computed(() =>
 );
 const title = computed(() =>
   mode.value === "login"
-    ? "登入贊耀服務平台"
+    ? "登入" + auth.platform.platform_name
     : mode.value === "forgot"
       ? "忘記密碼"
       : mode.value === "password"
@@ -45,7 +45,7 @@ const title = computed(() =>
 );
 const done = computed(() =>
   ["forgot", "token"].includes(mode.value)
-    ? "請聯絡贊耀公司人員確認身分並重設臨時密碼。使用臨時密碼登入後，必須先設定自己的密碼才能繼續使用。"
+    ? "報修者請聯絡本公司管理者或贊耀公司人員重設臨時密碼；公司管理者請聯絡贊耀公司人員。使用臨時密碼登入後，必須先設定自己的密碼才能繼續使用。"
     : "",
 );
 watch(
@@ -92,8 +92,8 @@ async function submit() {
     <div class="auth-top">
       <RouterLink to="/" class="auth-brand"
         ><span class="brand-mark">Z</span
-        ><strong>贊耀服務平台</strong></RouterLink
-      ><span>贊耀電腦｜銷售・維修・資訊服務</span>
+        ><strong>{{ auth.platform.platform_name }}</strong></RouterLink
+      ><span>{{ auth.platform.company_name }}｜銷售・維修・資訊服務</span>
     </div>
     <main class="auth-main">
       <section class="auth-card">
@@ -198,7 +198,7 @@ async function submit() {
           }}</span>
         </div>
       </section>
-      <p class="auth-footer">ZY-Info · 贊耀服務平台</p>
+      <p class="auth-footer">ZY-Info · {{ auth.platform.platform_name }}</p>
     </main>
   </div>
 </template>

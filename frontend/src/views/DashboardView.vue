@@ -9,6 +9,7 @@ import {
   Clock3,
   MessageSquare,
   CheckCircle2,
+  CircleX,
 } from "@lucide/vue";
 import { api, errorText, dateText } from "../api";
 import { useAuth } from "../stores/auth";
@@ -67,25 +68,16 @@ onMounted(() => load());
       ><Plus :size="17" />新增報修</RouterLink
     ></PageHeading
   ><FieldErrors :message="error" />
-  <div class="stat-grid">
-    <div class="stat-card">
-      <span class="stat-icon amber"><Inbox :size="20" /></span>
-      <div>
-        <span>待接手</span><strong>{{ data.counts.unassigned || 0 }}</strong>
-      </div>
-      <small>等待安排人員</small>
-    </div>
+  <div class="stat-grid" :class="{ 'client-stats': !auth.isAdmin }">
     <div class="stat-card">
       <span class="stat-icon blue"><Clock3 :size="20" /></span>
       <div>
         <span>處理中</span
-        ><strong>{{
-          (data.counts.assigned || 0) + (data.counts.processing || 0)
-        }}</strong>
+        ><strong>{{ data.counts.processing || 0 }}</strong>
       </div>
       <small>待處理與進行中</small>
     </div>
-    <div class="stat-card">
+    <div v-if="auth.isAdmin" class="stat-card">
       <span class="stat-icon purple"><MessageSquare :size="20" /></span>
       <div>
         <span>待客戶回覆</span><strong>{{ data.counts.waiting || 0 }}</strong>
@@ -97,7 +89,12 @@ onMounted(() => load());
       <div>
         <span>已完成</span><strong>{{ data.counts.completed || 0 }}</strong>
       </div>
-      <small>處理完成待確認</small>
+      <small>案件已處理完成</small>
+    </div>
+    <div class="stat-card">
+      <span class="stat-icon amber"><CircleX :size="20" /></span>
+      <div><span>已取消</span><strong>{{ data.counts.cancelled || 0 }}</strong></div>
+      <small>案件已取消</small>
     </div>
   </div>
   <section class="panel">
@@ -219,6 +216,10 @@ onMounted(() => load());
 </template>
 
 <style scoped>
+@media (min-width: 641px) {
+  .stat-grid.client-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
 .case-table {
   table-layout: fixed;
   font-size: 14px;

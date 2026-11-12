@@ -1,5 +1,4 @@
 from django.db import transaction
-from django.db.models import Count
 from django.shortcuts import get_object_or_404
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework.decorators import api_view
@@ -10,6 +9,7 @@ from apps.companies.models import Company
 from apps.forms.models import FormVersion
 from apps.forms.services import latest, accepted, dynamic_form
 from apps.tickets.models import Ticket
+from apps.tickets.statuses import visible_status, status_label, status_choices, status_counts, allowed_transitions
 from apps.tickets.forms import TicketForm, EntryForm, AssignmentForm
 from apps.tickets.views import filtered
 from apps.tickets.services import create_ticket, assign, claim, update_status, add_entry
@@ -25,14 +25,14 @@ from common.permissions import (
 from .helpers import valid, page
 
 
-def summary(t):
+def summary(t, user):
     return {
         "id": t.pk,
         "number": t.number,
         "title": t.title,
         "company_name": t.company.name,
-        "status": t.status,
-        "status_label": t.get_status_display(),
+        "status": visible_status(user, t.status),
+        "status_label": status_label(user, t.status),
         "engineer_name": str(t.engineer) if t.engineer_id else "尚未接手",
         "reporter_name": t.snapshot.get("display_name", ""),
         "created_at": t.created_at,
@@ -42,39 +42,20 @@ def summary(t):
 
 
 def transitions(user, t):
-    options = {
-        "unassigned": ["cancelled"],
-        "assigned": ["processing", "cancelled"],
-        "processing": ["waiting", "completed", "cancelled"],
-        "waiting": ["processing", "completed", "cancelled"],
-        "completed": ["closed", "processing"],
-        "closed": ["processing"],
-        "cancelled": ["processing"],
-    }.get(t.status, [])
-    if user.role in ["reporter", "company_admin"]:
-        options = ["closed"] if t.status == "completed" else []
-    return [{"value": s, "label": Ticket.Status(s).label} for s in options]
+    return [{"value": s, "label": status_label(user, s)} for s in allowed_transitions(user, t)]
 
 
 @api_view(["GET", "POST"])
 def collection(request):
     if request.method == "GET":
-        result = page(filtered(request.user, request.query_params), request, summary)
-        counts = {s: 0 for s in Ticket.Status.values}
-        counts.update(
-            {
-                x["status"]: x["n"]
-                for x in tickets_for(request.user)
-                .values("status")
-                .annotate(n=Count("id"))
-            }
-        )
+        result = page(filtered(request.user, request.query_params), request, lambda t: summary(t, request.user))
+        counts = status_counts(request.user, tickets_for(request.user))
         return Response(
             result
             | {
                 "counts": counts,
                 "statuses": [
-                    {"value": s, "label": label} for s, label in Ticket.Status.choices
+                    {"value": s, "label": label} for s, label in status_choices(request.user)
                 ],
                 "companies": [
                     {"id": c.pk, "name": c.name}
@@ -145,7 +126,7 @@ def collection(request):
         for p in paths:
             p.unlink(missing_ok=True)
         raise
-    return Response(summary(ticket), status=201)
+    return Response(summary(ticket, request.user), status=201)
 
 
 @api_view(["GET"])
@@ -256,7 +237,7 @@ def detail(request, pk):
         t = get_object_or_404(tickets_for(request.user), pk=pk)
     else:
         log(request.user, "ticket.view", t.number, company=t.company, request=request)
-    result = summary(t) | {
+    result = summary(t, request.user) | {
         "description": t.description,
         "anydesk": t.anydesk,
         "snapshot": t.snapshot,
@@ -291,9 +272,9 @@ def detail(request, pk):
         ],
         "transitions": transitions(request.user, t),
         "can_internal": internal_allowed(request.user),
-        "can_comment": t.status not in ["closed", "cancelled"],
+        "can_comment": t.status != "cancelled",
         "can_claim": request.user.role == "it_admin"
-        and t.status == "unassigned" and t.engineer_id is None,
+        and t.status == "assigned" and t.engineer_id is None,
     }
     result["engineers"] = (
         [

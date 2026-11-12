@@ -29,7 +29,7 @@ def temporary_password(actor, user):
     return raw
 
 
-EMAIL_RECOVERY_DISABLED = "不提供Email驗證或自助重設密碼。請聯絡贊耀公司人員確認身分並重設臨時密碼；登入後必須先更換自己的密碼。"
+EMAIL_RECOVERY_DISABLED = "不提供Email驗證或自助重設密碼。報修者請聯絡本公司管理者或贊耀公司人員確認身分並重設臨時密碼，公司管理者請聯絡贊耀公司人員；登入後必須先更換自己的密碼。"
 
 
 def issue_token(user, purpose):

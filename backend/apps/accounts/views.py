@@ -132,8 +132,6 @@ def users(request):
 @login_required
 def user_edit(request, pk=None):
     require(request.user, "it_admin", "company_admin")
-    if pk is None:
-        require(request.user, "it_admin")
     obj = get_object_or_404(managed_users(request.user), pk=pk) if pk else User()
     form = UserForm(request.POST or None, instance=obj, actor=request.user)
     if request.method == "POST" and form.is_valid():
@@ -142,7 +140,7 @@ def user_edit(request, pk=None):
                 User.objects.select_for_update().filter(role="it_admin").order_by("pk")
             )
             existing = (
-                User.objects.select_for_update().get(pk=obj.pk) if obj.pk else None
+                get_object_or_404(managed_users(request.user).select_for_update(), pk=obj.pk) if obj.pk else None
             )
             email_before = existing.email if existing else ""
             if (
@@ -190,12 +188,12 @@ def user_edit(request, pk=None):
 @login_required
 @require_POST
 def user_action(request, pk, action):
-    require(request.user, "it_admin")
+    require(request.user, "it_admin", "company_admin")
     with transaction.atomic():
         # Serialize administrator lifecycle changes, preserving the last active admin.
         list(User.objects.select_for_update().filter(role="it_admin").order_by("pk"))
         user = get_object_or_404(
-            User.objects.select_for_update().filter(deleted_at__isnull=True), pk=pk
+            managed_users(request.user).select_for_update(), pk=pk
         )
         if action == "temporary":
             if not user.is_active:
@@ -223,7 +221,7 @@ def user_action(request, pk, action):
         if (
             action in ["disable", "delete"]
             and user.assigned_tickets.exclude(
-                status__in=["closed", "cancelled"]
+                status__in=["completed", "cancelled"]
             ).exists()
         ):
             messages.error(request, "此帳號仍有未結案件，請先交接")
